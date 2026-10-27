@@ -1,0 +1,17 @@
+[project]
+name = "interactive-map"
+version = "0.1.0"
+description = "Been There Atlas: a travel map for marking countries, cities and trips"
+readme = "README.md"
+authors = [
+    { name = "Bradley Black", email = "236290056+bradley-black@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+interactive-map = "interactive_map:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"

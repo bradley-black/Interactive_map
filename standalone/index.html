@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<title>Been There Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen atlas. Map fills the left, a tabbed logbook panel sits right; stacks map-over-panel on phones. */
+:root{
+  --bg:#EEF2F4; --panel:#FFFFFF; --ink:#13202A; --muted:#5A6B77; --line:#DCE3E8; --soft:#F3F6F8;
+  --ocean:#D6E4EC; --land:#FAFBFC; --border:#AEBFCA; --grat:#C4D5DF;
+  --visited:#1C8467; --visited-hover:#156B53; --accent:#E0532B; --accent-ink:#FFFFFF;
+  --chip:#E4F1EC; --chip-ink:#11543F; --warn:#B3261E;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Figtree", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r:12px; --shadow:0 1px 2px rgba(19,32,42,.06), 0 8px 24px rgba(19,32,42,.08);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0C1318; --panel:#131D24; --ink:#E5ECF1; --muted:#8C9DA9; --line:#22313B; --soft:#18242C;
+  --ocean:#0A1820; --land:#1A2731; --border:#344956; --grat:#14252F;
+  --visited:#2BAE8A; --visited-hover:#38C79F; --accent:#FF7A4F; --accent-ink:#1A0D07;
+  --chip:#173A30; --chip-ink:#9BE3CB; --warn:#FF8A80;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0C1318; --panel:#131D24; --ink:#E5ECF1; --muted:#8C9DA9; --line:#22313B; --soft:#18242C;
+  --ocean:#0A1820; --land:#1A2731; --border:#344956; --grat:#14252F;
+  --visited:#2BAE8A; --visited-hover:#38C79F; --accent:#FF7A4F; --accent-ink:#1A0D07;
+  --chip:#173A30; --chip-ink:#9BE3CB; --warn:#FF8A80;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.app{height:100%;display:grid;grid-template-rows:auto 1fr;gap:12px;padding-block:14px}
+.top{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.brand svg{flex:none}
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin-left:auto;align-items:baseline}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat b{font-family:var(--display);font-weight:700;font-size:20px;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.badge{font-size:12px;padding:4px 10px;border-radius:999px;background:var(--soft);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+.badge.ok{color:var(--chip-ink);background:var(--chip);border-color:transparent}
+
+.layout{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:14px}
+.mapwrap{position:relative;min-height:0;border-radius:var(--r);overflow:hidden;background:var(--ocean);border:1px solid var(--line)}
+#map{display:block;width:100%;height:100%;touch-action:none}
+#map .sphere{fill:var(--ocean)}
+#map .grat{fill:none;stroke:var(--grat);stroke-width:.6;vector-effect:non-scaling-stroke}
+#map .country{fill:var(--land);stroke:var(--border);stroke-width:.5;vector-effect:non-scaling-stroke;transition:fill .15s}
+#map .country:hover{fill:var(--soft)}
+#map .country.visited{fill:var(--visited)}
+#map .country.visited:hover{fill:var(--visited-hover)}
+#map .route{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;transition:opacity .2s}
+#map .route.draft{stroke:var(--accent);stroke-dasharray:6 5}
+#map .faded{opacity:.15}
+#map .city{fill:var(--accent);stroke:var(--panel);vector-effect:non-scaling-stroke;stroke-width:1.5;cursor:pointer}
+#map .stop{fill:var(--panel);vector-effect:non-scaling-stroke;stroke-width:2}
+#map .label{font-family:var(--body);font-weight:600;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.mapwrap.pinmode #map{cursor:crosshair}
+.maptools{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;box-shadow:var(--shadow)}
+.seg button{border:0;background:transparent;padding:6px 10px;border-radius:7px;font-weight:600;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+.zoomer{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column}
+.zoomer button{width:34px;height:34px;padding:0;justify-content:center;font-size:18px;color:var(--ink)}
+.legend{position:absolute;left:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow);max-width:calc(100% - 70px)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.tooltip{position:absolute;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;padding:5px 9px;border-radius:7px;white-space:nowrap;transform:translate(-50%, calc(-100% - 10px));z-index:5}
+.pinform{position:absolute;z-index:6;width:260px;max-width:calc(100% - 20px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;box-shadow:var(--shadow);display:grid;gap:8px}
+.pinform h3{margin:0;font-size:14px}
+.maperr{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);padding:20px;text-align:center}
+.welcome{position:absolute;left:10px;bottom:52px;width:290px;max-width:calc(100% - 20px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow)}
+.welcome h2{font-family:var(--display);margin:0 0 6px;font-size:17px;letter-spacing:-.01em}
+.welcome ol{margin:0;padding-left:18px;display:grid;gap:4px;color:var(--muted)}
+.welcome ol b{color:var(--ink);font-weight:600}
+
+.panel{min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--line);flex:none}
+.tabs svg{display:none}
+.tabs button{white-space:nowrap;flex:1;min-width:0;border:0;background:transparent;padding:12px 4px 10px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .count{font-family:var(--mono);font-size:11px;background:var(--soft);border-radius:999px;padding:1px 6px}
+.tabpane{flex:1;min-height:0;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+.tabpane.chatpane{padding:0;gap:0;overflow:hidden}
+.sec h3{font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:700;display:flex;justify-content:space-between;align-items:baseline}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row > *{min-width:0}
+input[type=text],input[type=date],input:not([type]),select,textarea{background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical}
+label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:600;flex:1 1 140px;min-width:0}
+label.f input,label.f select,label.f textarea{font-weight:400;color:var(--ink);font-size:14px}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 12px;border-radius:9px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.danger{color:var(--warn)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sm{padding:5px 9px;font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:3px 4px 3px 10px;font-size:13px;font-weight:500}
+.chip button{border:0;background:transparent;color:inherit;width:20px;height:20px;border-radius:50%;padding:0;opacity:.6;line-height:1}
+.chip button:hover{opacity:1;background:rgba(0,0,0,.08)}
+.list{display:grid;gap:2px}
+.li{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .grow{flex:1;min-width:0}
+.li .sub{font-size:12px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.empty-note{color:var(--muted);font-size:13px;padding:14px;border:1px dashed var(--line);border-radius:10px;text-align:center}
+
+.folderhead{display:flex;align-items:center;gap:10px}
+.folderhead h2{font-family:var(--display);margin:0;font-size:19px;letter-spacing:-.01em;flex:1}
+.trip{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.trip.sel{border-color:var(--ink)}
+.trip-h{display:flex;gap:10px;align-items:flex-start;padding:12px;width:100%;text-align:left;background:transparent;border:0}
+.trip-h .sw{width:6px;align-self:stretch;border-radius:3px;flex:none}
+.trip-h .grow{flex:1;min-width:0}
+.trip-h strong{display:block;font-size:15px}
+.trip-h .meta{font-size:12px;color:var(--muted);margin-top:2px}
+.src{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;border-radius:5px;padding:1px 6px;background:var(--soft);color:var(--muted);font-weight:700;flex:none}
+.trip-b{padding:0 12px 12px 28px;display:grid;gap:10px}
+.days{list-style:none;margin:0;padding:0;display:grid;gap:0;position:relative}
+.days li{display:grid;grid-template-columns:52px minmax(0,1fr);gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.days .dn{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-top:2px}
+.days .pl{font-weight:600}
+.days .nt{font-size:13px;color:var(--muted);white-space:pre-wrap}
+.trip-actions{display:flex;gap:6px;flex-wrap:wrap}
+.confirm{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--warn);flex-wrap:wrap}
+
+.form{display:grid;gap:12px}
+.dayrow{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--soft)}
+.dayrow input,.dayrow textarea{background:var(--panel)}
+.dayrow-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px}
+
+.chatlog{flex:1;min-height:0;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:9px 12px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.msg.me{align-self:flex-end;background:var(--ink);color:var(--panel);border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:var(--soft);border-bottom-left-radius:4px}
+.msg.ai.typing{color:var(--muted);font-style:italic}
+.examples{display:grid;gap:6px}
+.examples button{text-align:left;border:1px dashed var(--line);background:transparent;border-radius:10px;padding:8px 10px;color:var(--muted);font-size:13px}
+.examples button:hover{border-color:var(--accent);color:var(--ink)}
+.draft{margin:0 16px 10px;border:1.5px dashed var(--accent);border-radius:var(--r);padding:10px 12px;display:grid;gap:6px}
+.draft-h{display:flex;align-items:center;gap:8px}
+.draft-h strong{flex:1;min-width:0}
+.draft .stops{font-size:12.5px;color:var(--muted)}
+.composer{border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px;align-items:flex-end;flex:none}
+.composer textarea{min-height:44px;max-height:140px}
+.noai{margin:16px;padding:14px;border-radius:10px;background:var(--soft);color:var(--muted)}
+
+.seg.swatches{align-items:center;gap:5px;padding:4px 8px}
+.swlabel{font-size:12px;font-weight:600;color:var(--muted);padding-right:2px}
+#swatchBtns{display:flex;gap:5px;align-items:center}
+.seg .sw-btn{width:22px;height:22px;border-radius:50%;background:var(--sw);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line);padding:0}
+.seg .sw-btn[aria-checked="true"]{box-shadow:0 0 0 2px var(--ink)}
+.swcustom{width:22px;height:22px;border-radius:50%;position:relative;overflow:hidden;background:conic-gradient(#e0532b,#d98a0b,#5c8a1f,#0f8f9e,#2f6fde,#7a55d6,#c2407a,#e0532b);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line);cursor:pointer;flex:none}
+.swcustom.on{box-shadow:0 0 0 2px var(--ink)}
+.swcustom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+#map .country.visited:hover{filter:brightness(.92)}
+.cdot{width:9px;height:9px;border-radius:50%;flex:none}
+.wizsteps{display:flex;gap:6px;flex-wrap:wrap}
+.wizsteps span{font-size:12px;font-weight:600;color:var(--muted);background:var(--soft);border-radius:999px;padding:3px 10px}
+.wizsteps span.on{background:var(--ink);color:var(--panel)}
+.wiz-list{list-style:none;margin:0;padding:0;display:grid}
+.wiz-list li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 0;position:relative}
+.wiz-list li:not(:last-child)::before{content:"";position:absolute;left:11px;top:34px;bottom:-6px;border-left:2px dashed var(--accent);opacity:.55}
+.wiz-list .pl{font-weight:600}
+.wiz-list .sub{font-size:12px;color:var(--muted)}
+.wiz-list .nt{font-size:13px;color:var(--muted);white-space:pre-wrap}
+.wiz-n{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--mono);font-size:12px;font-weight:600;flex:none}
+.wizcard{border:1.5px solid var(--ink);border-radius:var(--r);padding:12px;display:grid;gap:10px}
+.wizcard-h{display:flex;align-items:center;gap:8px;font-family:var(--display);font-weight:700;font-size:16px}
+.wizfoot{justify-content:space-between;align-items:center}
+.err{color:var(--warn);font-size:13px;font-weight:500}
+.search{position:relative;flex:1 1 260px;max-width:340px;min-width:0}
+.search input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px 9px 34px;box-shadow:var(--shadow);font-size:14px}
+.search > svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.qres{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;padding:4px;list-style:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);max-height:min(360px, 60vh);overflow:auto;z-index:8}
+.qres li{display:flex;gap:10px;align-items:center;padding:7px 9px;border-radius:8px;cursor:pointer}
+.qres li[aria-selected="true"],.qres li:hover{background:var(--soft)}
+.qres .ic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;font-size:11px;font-weight:700;font-family:var(--mono)}
+.qres .ic.c{background:var(--chip);color:var(--chip-ink)}
+.qres .ic.p{background:var(--accent);color:var(--accent-ink);border-radius:50%}
+.qres .ic.ai{background:var(--ink);color:var(--panel)}
+.qres .nm{font-weight:600}
+.qres .sub{font-size:12px;color:var(--muted)}
+.qres .grow{flex:1;min-width:0}
+.qres .empty{color:var(--muted);cursor:default}
+.found{position:absolute;left:50%;transform:translateX(-50%);bottom:52px;width:min(380px, calc(100% - 20px));background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow);display:grid;gap:8px;z-index:7}
+.found-h{display:flex;align-items:baseline;gap:8px}
+.found-h strong{font-family:var(--display);font-size:17px;flex:1;min-width:0}
+#map .found-ring{fill:none;stroke:var(--ink);vector-effect:non-scaling-stroke;stroke-width:2}
+#map .found-dot{fill:var(--ink);stroke:var(--panel);vector-effect:non-scaling-stroke;stroke-width:2}
+@media (prefers-reduced-motion: no-preference){ #map .found-ring{animation:pulse 1.6s ease-out infinite;transform-box:fill-box;transform-origin:center} }
+@keyframes pulse{from{opacity:1;transform:scale(.6)}to{opacity:0;transform:scale(1.8)}}
+#map .sat-img{display:none}
+/* Satellite: imagery is always dark, so these colours are fixed on purpose */
+.mapwrap.sat{background:#03080d}
+.sat #map .sphere{fill:#03080d}
+.sat #map .sat-img{display:inline}
+.sat #map .grat{display:none}
+.sat #map .country{fill:transparent;stroke:rgba(255,255,255,.55)}
+.sat #map .country:hover{fill:rgba(255,255,255,.16)}
+.sat #map .country.visited{fill:#2BAE8A;fill-opacity:.6}
+.sat #map .label{fill:#fff;stroke:rgba(0,0,0,.8)}
+.sat #map .city{stroke:#fff}
+.sat #map .found-ring{stroke:#fff}
+.sat #map .found-dot{fill:#fff;stroke:#000}
+/* Street (OpenStreetMap tiles): light basemap in either theme, so colours are fixed */
+.mapwrap.street{background:#AAD3DF}
+.street #map .sphere,.street #map .grat,.street #map .sat-img{display:none}
+.street #map .country{fill:transparent;stroke:rgba(60,40,90,.45)}
+.street #map .country:hover{fill:rgba(0,0,0,.06)}
+.street #map .country.visited{fill:#1C8467;fill-opacity:.35}
+.street #map .label{fill:#13202A;stroke:#fff}
+.street #map .found-ring{stroke:#13202A}
+.street #map .found-dot{fill:#13202A;stroke:#fff}
+.attrib{position:absolute;right:54px;bottom:10px;font-size:11px;background:rgba(255,255,255,.85);color:#333;padding:2px 6px;border-radius:4px}
+.attrib a{color:#0B5CAD}
+button.badge{cursor:default;font:inherit;font-size:12px}
+.badge.cta{background:var(--accent);color:var(--accent-ink);border-color:transparent;cursor:pointer;font-weight:600}
+.badge.click{cursor:pointer}
+.account{position:fixed;top:calc(64px + env(safe-area-inset-top, 0px));right:max(16px, env(safe-area-inset-right, 0px));width:min(340px, calc(100% - 32px));background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;z-index:40;display:grid;gap:10px}
+.account h2{font-family:var(--display);font-size:18px;margin:0;padding-right:28px}
+.account .x{position:absolute;right:8px;top:8px}
+.tp{display:flex;flex-direction:column;gap:14px}
+.tp-top{display:flex;justify-content:space-between;align-items:center}
+.tp-cover{position:relative;border-radius:var(--r);overflow:hidden;min-height:118px;background:linear-gradient(135deg, var(--trip), color-mix(in srgb, var(--trip) 50%, #000));display:flex;align-items:flex-end;color:#fff}
+.tp-cover.has-img{min-height:200px}
+.tp-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tp-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 30%, rgba(0,0,0,.66))}
+.tp-cover-txt{position:relative;z-index:1;padding:14px 16px;display:grid;gap:2px}
+.tp-cover h2{font-family:var(--display);font-size:24px;line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.tp-cover-txt div{font-size:13px;opacity:.92}
+.tp-stats{display:grid;grid-template-columns:repeat(5, minmax(0,1fr));gap:4px;text-align:center;padding:4px 0 2px;border-bottom:1px solid var(--line)}
+.tp-stats div{padding-bottom:10px}
+.tp-stats b{display:block;font-family:var(--display);font-size:19px;font-variant-numeric:tabular-nums}
+.tp-stats span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.tp-notes{margin:0;white-space:pre-wrap}
+.steps{list-style:none;margin:0;padding:0;position:relative}
+.steps::before{content:"";position:absolute;left:13px;top:16px;bottom:16px;border-left:2px solid var(--line)}
+.step{position:relative;padding:4px 0 14px}
+.step-go{display:flex;gap:12px;align-items:flex-start;background:none;border:0;padding:0;text-align:left;width:100%}
+.step-go:hover strong{text-decoration:underline}
+.step-n{width:28px;height:28px;border-radius:50%;background:var(--trip);color:#fff;display:grid;place-items:center;font-family:var(--mono);font-size:12px;font-weight:600;flex:none;position:relative;z-index:1;box-shadow:0 0 0 3px var(--panel)}
+.step-go .grow{min-width:0;padding-top:3px}
+.step-go strong{display:block;font-size:15px}
+.step-d{font-size:12px;color:var(--muted)}
+.step-body{margin-left:40px;display:grid;gap:8px;margin-top:6px}
+.step-story{margin:0;white-space:pre-wrap}
+.leg{margin-left:40px;font-size:11.5px;color:var(--muted);font-family:var(--mono);padding:0 0 8px}
+.pgrid{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:4px}
+.ph{padding:0;border:0;background:var(--soft);border-radius:8px;overflow:hidden;aspect-ratio:1;max-width:100%;display:block}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.addph{justify-self:start;cursor:pointer}
+.tc-thumb{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:none;background:var(--soft)}
+/* Photo viewer: always a dark stage, whatever the theme */
+.lightbox{position:fixed;inset:0;z-index:60;background:rgba(6,10,14,.95);color:#fff;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+  padding:env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px))}
+.lb-top{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+.lb-x{background:none;border:0;color:#fff;font-size:30px;line-height:1;width:44px;height:44px}
+.lb-stage{display:flex;align-items:center;justify-content:center;gap:8px;min-height:0;height:100%}
+.lb-stage img{max-width:calc(100% - 110px);max-height:100%;object-fit:contain;border-radius:6px;min-width:0}
+.lb-nav{background:rgba(255,255,255,.14);border:0;color:#fff;width:44px;height:44px;border-radius:50%;font-size:26px;line-height:1;flex:none}
+.lb-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 0 16px}
+.lb-bar input,.lb-bar select{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:9px;padding:8px 10px;min-width:0}
+.lb-bar input{flex:1 1 220px}
+.lb-bar select option{color:#13202A;background:#fff}
+.lb-bar .btn{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.22)}
+.lb-bar .btn.danger,.lb-bar .confirm{color:#FF9C94}
+@media (max-width: 600px){ .lb-stage img{max-width:100%} .lb-nav{position:absolute;top:50%} .lb-nav[data-lb="prev"]{left:8px} .lb-nav[data-lb="next"]{right:8px} }
+.search input{line-height:20px}
+.search .ghost{position:absolute;inset:0;padding:0 12px 0 34px;border:1px solid transparent;display:flex;align-items:center;pointer-events:none;color:var(--muted);white-space:pre;overflow:hidden;font-size:14px;line-height:20px}
+.search .ghost .gt{visibility:hidden}
+.qres.floating{position:fixed;right:auto;z-index:45;max-height:min(300px, 50vh)}
+.qres .tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--muted)}
+.av{display:inline-grid;place-items:center;border-radius:50%;object-fit:cover;color:#fff;font-weight:700;flex:none;background:var(--soft);line-height:1}
+.person{gap:10px}
+.pbtn{display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;flex:1;min-width:0}
+.pbtn b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pbtn .sub{display:block}
+.me-card{display:flex;align-items:center;gap:14px}
+.me-card h2{font-family:var(--display);margin:0;font-size:19px;letter-spacing:-.01em}
+.me-card .sub,.counts{font-size:12.5px;color:var(--muted)}
+.feed{display:grid;gap:12px}
+.feed-item{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.feed-who{display:flex;gap:8px;align-items:center;padding:10px 12px;background:none;border:0;width:100%;text-align:left}
+.feed-who .sub{font-size:12px;color:var(--muted)}
+.feed-trip{display:block;width:100%;text-align:left;background:none;border:0;padding:0}
+.feed-cover{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:var(--soft)}
+.feed-body{padding:10px 12px 12px;display:grid;gap:2px}
+.feed-body strong{font-size:15px}
+.feed-body .sub{font-size:12.5px;color:var(--muted)}
+details.sec summary{cursor:pointer;font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.viewbar{display:flex;align-items:center;gap:8px;background:var(--chip);color:var(--chip-ink);border-radius:999px;padding:4px 6px 4px 4px;font-size:13px;flex-wrap:wrap;min-width:0}
+.vis{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+.vis select{padding:4px 8px;width:auto;font-size:12.5px}
+body.viewing .own-only{display:none!important}
+.lb-cap{font-size:15px}
+.cphoto{pointer-events:none}
+#map .cp-outline{fill:none;stroke:rgba(255,255,255,.9);stroke-width:1.2;vector-effect:non-scaling-stroke}
+#map .route.m-plane{stroke-dasharray:7 6}
+#map .route.m-boat{stroke-dasharray:2 5}
+#map .route.m-walk,#map .route.m-bike{stroke-dasharray:1 4}
+.mode-pill{display:inline-block;font-family:var(--body);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:0 6px;line-height:17px;vertical-align:1px}
+.tp-modes{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.toast{z-index:70;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:50;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+
+@media (max-width: 860px){
+  html,body{height:auto}
+  .app{height:auto}
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .mapwrap{height:56vh;min-height:320px}
+  .panel{min-height:540px}
+  .stats{margin-left:0;gap:14px}
+  .welcome{display:none}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="13" fill="none" stroke="var(--ink)" stroke-width="2"/><path d="M2 15h26M15 2c4 4 5.5 8.5 5.5 13S19 24 15 28M15 2c-4 4-5.5 8.5-5.5 13S11 24 15 28" fill="none" stroke="var(--ink)" stroke-width="1.6"/><circle cx="21" cy="10" r="3.6" fill="var(--accent)" stroke="var(--panel)" stroke-width="1.5"/></svg>
+      <h1>Been There Atlas</h1>
+    </div>
+    <div class="viewbar" id="viewbar" hidden></div>
+    <div class="stats" aria-live="polite">
+      <div class="stat"><b id="sCountries">0</b><span>Countries</span></div>
+      <div class="stat"><b id="sPct">0%</b><span>of 195</span></div>
+      <div class="stat"><b id="sCities">0</b><span>Cities</span></div>
+      <div class="stat"><b id="sTrips">0</b><span>Trips</span></div>
+      <div class="stat"><b id="sKm" class="mono">0</b><span>km of routes</span></div>
+      <button class="badge" id="storeBadge" type="button">Connecting…</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="mapwrap" id="mapwrap" aria-label="World map">
+      <svg id="map" role="img" aria-label="World map of places visited"></svg>
+      <div class="maptools">
+        <div class="search" id="search">
+          <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 10l3.6 3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <input id="q" type="search" placeholder="Search countries and cities" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="qres" aria-autocomplete="list">
+          <span class="ghost" id="qGhost" aria-hidden="true"></span>
+          <ul class="qres" id="qres" role="listbox" hidden></ul>
+        </div>
+        <div class="seg own-only" role="group" aria-label="Map tap mode">
+          <button id="modeCountry" aria-pressed="true" title="Tap a country to mark it visited">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="2.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 7l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Mark countries</button>
+          <button id="modePin" aria-pressed="false" title="Tap the map to drop a city pin">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 13s4.5-4.2 4.5-7.5a4.5 4.5 0 0 0-9 0C2.5 8.8 7 13 7 13z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="5.5" r="1.6" fill="currentColor"/></svg>Drop city pin</button>
+        </div>
+        <div class="seg" role="group" aria-label="Map style">
+          <button id="styleMap" aria-pressed="true">Map</button>
+          <button id="styleSat" aria-pressed="false">Satellite</button>
+          <button id="styleStreet" aria-pressed="false" hidden>Street</button>
+        </div>
+        <div class="seg swatches own-only" id="swatches" role="radiogroup" aria-label="Fill colour for countries">
+          <span class="swlabel">Fill</span>
+          <span id="swatchBtns"></span>
+          <label class="swcustom" id="swCustom" title="Pick any colour"><input type="color" id="customColor" value="#e0532b" aria-label="Pick any colour"></label>
+        </div>
+      </div>
+      <div class="zoomer seg">
+        <button id="zIn" aria-label="Zoom in">+</button>
+        <button id="zOut" aria-label="Zoom out">−</button>
+        <button id="zReset" aria-label="Reset view" style="font-size:13px">⟲</button>
+      </div>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--visited)"></i>Visited</span>
+        <span><i style="background:var(--accent);border-radius:50%"></i>City</span>
+        <span><i style="background:transparent;border:2px dashed var(--accent);border-radius:2px"></i>Trip draft</span>
+        <span><svg width="18" height="8" aria-hidden="true" style="vertical-align:0;margin-right:5px"><line x1="0" y1="4" x2="18" y2="4" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 3"/></svg>Flight</span>
+      </div>
+      <div class="tooltip" id="tip" hidden></div>
+      <div class="found" id="found" hidden></div>
+      <div class="attrib" id="attrib" hidden>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+      <form class="pinform" id="pinform" hidden>
+        <h3>Name this place</h3>
+        <div class="mono hint" id="pinCoords"></div>
+        <input id="pinName" type="text" placeholder="City or place, e.g. Kyoto" autocomplete="off" data-suggest="city" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest" required>
+        <input id="pinCountry" type="text" list="countryList" placeholder="Country" autocomplete="off">
+        <div class="row"><button class="btn primary sm" type="submit">Add city</button><button class="btn ghost sm" type="button" id="pinCancel">Cancel</button></div>
+      </form>
+      <div class="welcome" id="welcome" hidden>
+        <h2>Start your map</h2>
+        <ol>
+          <li><b>Pick a fill colour</b>, then tap a country to mark it.</li>
+          <li><b>Drop city pins</b>, or add cities in Places.</li>
+          <li><b>Document a trip</b> step by step in My Trips, or text it to the AI.</li>
+        </ol>
+      </div>
+      <div class="maperr" id="maperr" hidden></div>
+    </section>
+
+    <aside class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tb-places" aria-selected="true" data-tab="places">Places</button>
+        <button role="tab" id="tb-trips" aria-selected="false" data-tab="trips">
+          <svg width="15" height="13" viewBox="0 0 15 13" aria-hidden="true"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3l1.5 1.6h5.5A1.5 1.5 0 0 1 14 4.1v6.4a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 1 10.5z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          My Trips <span class="count" id="tripCount">0</span></button>
+        <button role="tab" id="tb-friends" aria-selected="false" data-tab="friends" hidden>
+          <svg width="16" height="13" viewBox="0 0 16 13" aria-hidden="true"><circle cx="5.5" cy="4" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1 12c0-2.5 2-4.2 4.5-4.2S10 9.5 10 12" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11.5" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M11.5 8c2 0 3.5 1.4 3.5 3.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+          Friends <span class="count" id="reqCount" hidden>0</span></button>
+        <button role="tab" id="tb-chat" aria-selected="false" data-tab="chat">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H6l-3 2.5V10.5H2a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          AI chat</button>
+      </div>
+
+      <div class="tabpane" id="tab-places" role="tabpanel">
+        <div class="sec own-only">
+          <h3>Add a country</h3>
+          <form class="row" id="addCountryForm">
+            <input id="addCountry" type="text" list="countryList" placeholder="Start typing… e.g. Portugal" autocomplete="off" style="flex:1 1 180px">
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+        </div>
+        <div class="sec own-only">
+          <h3>Add a city</h3>
+          <form class="row" id="addCityForm">
+            <input id="addCity" type="text" placeholder="City" autocomplete="off" data-suggest="city" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest" style="flex:1 1 120px">
+            <input id="addCityCountry" type="text" list="countryList" placeholder="Country" autocomplete="off" style="flex:1 1 120px">
+            <button class="btn primary" type="submit" id="addCityBtn">Add</button>
+          </form>
+          <p class="hint" id="cityHint" style="margin-top:6px">The AI finds the exact spot. You can also use <b>Drop city pin</b> on the map.</p>
+        </div>
+        <div class="sec">
+          <h3>Countries <span class="mono" id="cCount">0</span></h3>
+          <div class="chips" id="countryChips"></div>
+        </div>
+        <div class="sec">
+          <h3>Cities <span class="mono" id="ciCount">0</span></h3>
+          <div class="list" id="cityList"></div>
+        </div>
+      </div>
+
+      <div class="tabpane" id="tab-trips" role="tabpanel" hidden></div>
+
+      <div class="tabpane" id="tab-friends" role="tabpanel" hidden></div>
+
+      <div class="tabpane chatpane" id="tab-chat" role="tabpanel" hidden>
+        <div class="chatlog" id="chatlog" aria-live="polite"></div>
+        <div id="draftBox"></div>
+        <form class="composer" id="composer">
+          <textarea id="chatInput" rows="2" placeholder="e.g. Day 1: flew into Lisbon, wandered Alfama, sunset at Miradouro da Graça"></textarea>
+          <button class="btn primary" type="submit" id="sendBtn">Send</button>
+        </form>
+      </div>
+    </aside>
+  </main>
+</div>
+<datalist id="countryList"></datalist>
+<div class="toast" id="toast" role="status" hidden></div>
+<ul class="qres floating" id="suggest" role="listbox" aria-label="Place suggestions" hidden></ul>
+<div class="account" id="account" role="dialog" aria-labelledby="accTitle" hidden></div>
+<div class="lightbox" id="lightbox" role="dialog" aria-label="Photo" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const slug = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60) || "x";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const TODAY = new Date().toISOString().slice(0,10);
+const ROUTE_COLORS = ["#2F6FDE","#C2407A","#7A55D6","#D98A0B","#0F8F9E","#5C8A1F"];
+const EARTH_KM = 6371;
+const MODES = [["plane","Plane"],["train","Train"],["car","Car"],["bus","Bus"],["boat","Boat"],["bike","Bike"],["walk","Walk"],["other","Other"]];
+const modeLabel = m => (MODES.find(x => x[0] === m) || [m, ""])[1];
+const modeOptions = v => `<option value="">Not set</option>` + MODES.map(([k, l]) => `<option value="${k}"${v === k ? " selected" : ""}>${l}</option>`).join("");
+function normMode(v){   // the AI may say "flew", "ferry", "drove"...
+  const t = String(v || "").toLowerCase();
+  if (!t) return "";
+  if (/plane|fl[yi]|flew|air/.test(t)) return "plane";
+  if (/train|rail|metro|subway|tram/.test(t)) return "train";
+  if (/bus|coach/.test(t)) return "bus";
+  if (/car|drove|drive|taxi|uber|road/.test(t)) return "car";
+  if (/boat|ferry|ship|cruise/.test(t)) return "boat";
+  if (/bike|cycl|bicycle/.test(t)) return "bike";
+  if (/walk|hike|foot/.test(t)) return "walk";
+  return "other";
+}
+const num = v => v !== null && v !== undefined && v !== "" && Number.isFinite(+v);
+
+/* ---------- state ---------- */
+const docs = new Map();          // id -> {kind, ...}
+let features = [], featByName = new Map(), countryNames = [];
+let selectedTrip = null, openTrip = null, editing = null, confirmDel = null;
+let draft = null, chat = [];      // AI chat working state (per visit)
+let sample = null;
+let mode = "country";
+let fillColor = null;             // null = theme green
+let wiz = null;                   // "Document a trip" in progress
+const FILLS = [{name:"Green", c:null},{name:"Blue", c:"#2F6FDE"},{name:"Violet", c:"#7A55D6"},{name:"Pink", c:"#C2407A"},{name:"Red", c:"#C8372D"},{name:"Amber", c:"#D98A0B"},{name:"Teal", c:"#0F8F9E"},{name:"Olive", c:"#5C8A1F"}];
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, 2600); }
+
+/* ---------- storage: Claude account (db), website account (Supabase), or this device ---------- */
+const LS_KEY = "been-there-atlas.v1";
+const CFG = window.ATLAS_CONFIG || {};
+const sb = CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase?.createClient ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey) : null;
+const BUCKET = "photos";
+let cloudUser = null, lastCloudLoad = 0;
+const store = {
+  mode: "local", col: null,
+  readLocal(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch { return {}; } },
+  writeLocal(){ try { localStorage.setItem(LS_KEY, JSON.stringify(Object.fromEntries(docs))); } catch {} },
+  async put(id, data){
+    if (viewing) { toast(VIEW_MSG); return; }
+    docs.set(id, data); render();
+    if (this.mode === "cloud") {
+      const { error } = await sb.from("docs").upsert({ user_id: cloudUser.id, id, data, kind: data.kind || null, visibility: visOf(data), updated_at: new Date().toISOString() });
+      if (error) toast("Couldn't save to your account. Check your connection and try again.");
+      return;
+    }
+    if (this.mode === "db") {
+      try { await this.col.doc(id).set(data); return; }
+      catch(e){ if (e && e.code === "invalid_argument") { this.toLocal(); toast("Your account can't save here, so this device is keeping your map."); } else { toast("Couldn't save. Check your connection and try again."); } }
+    }
+    this.writeLocal();
+  },
+  async remove(id){
+    if (viewing) { toast(VIEW_MSG); return; }
+    docs.delete(id); render();
+    if (this.mode === "cloud") {
+      const { error } = await sb.from("docs").delete().eq("user_id", cloudUser.id).eq("id", id);
+      if (error) toast("Couldn't delete from your account. Try again.");
+      return;
+    }
+    if (this.mode === "db") { try { await this.col.doc(id).delete(); return; } catch(e){ if (e && e.code === "invalid_argument") this.toLocal(); else toast("Couldn't delete. Try again."); } }
+    this.writeLocal();
+  },
+  toLocal(){ this.mode = "local"; if (this.unsub) this.unsub(); setBadge(); this.writeLocal(); },
+  unsub: null
+};
+function setBadge(){
+  const b = $("#storeBadge");
+  if (store.mode === "cloud") { b.textContent = "Synced · " + (cloudUser?.email || "your account"); b.className = "badge ok click"; }
+  else if (store.mode === "db") { b.textContent = "Saved to your account"; b.className = "badge ok"; }
+  else if (sb) { b.textContent = "Sign in to save trips"; b.className = "badge cta"; }
+  else { b.textContent = "Saved on this device"; b.className = "badge"; }
+}
+async function cloudLoad(){
+  lastCloudLoad = Date.now();
+  const { data, error } = await sb.from("docs").select("id,data").eq("user_id", cloudUser.id);   // friends' shared things are readable too; only load mine
+  if (error) { toast("Couldn't load your trips. Check your connection."); return; }
+  const local = Object.entries(store.readLocal());
+  docs.clear(); (data || []).forEach(r => docs.set(r.id, r.data));
+  // first sign-in on this device: move anything saved here into the account
+  const extra = local.filter(([k]) => !docs.has(k));
+  if (extra.length) {
+    const { error: e2 } = await sb.from("docs").upsert(extra.map(([id, d]) => ({ user_id: cloudUser.id, id, data: d, kind: d.kind || null, visibility: visOf(d) })));
+    if (!e2) { extra.forEach(([k, v]) => docs.set(k, v)); toast(`Moved ${extra.length} thing${extra.length === 1 ? "" : "s"} saved on this device into your account`); }
+    else return render();
+  }
+  try { localStorage.removeItem(LS_KEY); } catch {}
+  render();
+}
+async function enterCloud(user){ cloudUser = user; store.mode = "cloud"; setBadge(); renderAccount(); await cloudLoad(); loadSocial(); }
+function leaveCloud(){
+  cloudUser = null; store.mode = "local"; urlCache.clear(); docs.clear(); openTrip = null; selectedTrip = null;
+  viewing = null; document.body.classList.remove("viewing"); me = null; social = freshSocial(); renderViewbar(); updateFriendBadge(); renderFriends();
+  for (const [k, v] of Object.entries(store.readLocal())) docs.set(k, v);
+  setBadge(); renderAccount(); render();
+}
+async function initStore(){
+  for (const [k,v] of Object.entries(store.readLocal())) docs.set(k, v);
+  render();
+  if (sb) {
+    sb.auth.onAuthStateChange((ev, session) => {
+      if (session?.user && cloudUser?.id !== session.user.id) enterCloud(session.user);
+      if (ev === "SIGNED_OUT" && cloudUser) leaveCloud();
+    });
+    const { data } = await sb.auth.getSession();
+    if (data?.session?.user && !cloudUser) await enterCloud(data.session.user);
+    window.addEventListener("focus", () => { if (store.mode === "cloud" && Date.now() - lastCloudLoad > 30000 && !lb) { cloudLoad(); loadSocial(); } });
+    $("#tb-friends").hidden = false;
+    setBadge(); return;
+  }
+  const claude = window.claude;
+  if (!claude || !claude.use) { setBadge(); return; }
+  const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+  const id = user ? await user.id() : null;
+  const canWrite = user ? await user.can("data.write") : null;
+  if (!db || !id || canWrite === false) { setBadge(); return; }
+  store.col = db.collection("data/users/" + id);
+  store.mode = "db"; setBadge();
+  let first = true;
+  store.unsub = store.col.onSnapshot(snap => {
+    const local = first ? new Map(docs) : null;
+    docs.clear();
+    snap.docs.forEach(d => { if (d.exists) docs.set(d.id, d.data()); });
+    // first sync: carry over anything this device saved before the account was reachable
+    if (first && local) { first = false; for (const [k,v] of local) if (!docs.has(k)) store.put(k, v); }
+    render();
+  }, () => { store.toLocal(); toast("Lost the connection to your account. Saving on this device."); });
+}
+
+/* ---------- account panel (website version) ---------- */
+let accMsg = "", accBusy = false;
+function renderAccount(){
+  const box = $("#account"); if (box.hidden) return;
+  const close = `<button class="btn ghost sm x" data-acc="close" aria-label="Close">×</button>`;
+  if (cloudUser) {
+    box.innerHTML = close + `<h2 id="accTitle">Your account</h2><p class="hint">Signed in as <b>${esc(cloudUser.email || "")}</b>. Your trips and photos are saved to your account, so they're on any device you sign in from.</p>
+      <div class="row"><button class="btn" data-acc="out">Sign out</button></div>`;
+    return;
+  }
+  box.innerHTML = close + `<h2 id="accTitle">Save your trips</h2>
+    <p class="hint">Sign in to keep your map, trips and photos safe and see them on any device.</p>
+    <form id="accForm" class="form" style="gap:8px" novalidate>
+      <label class="f">Email<input type="email" id="accEmail" autocomplete="email" required></label>
+      <label class="f">Password<input type="password" id="accPass" autocomplete="current-password" minlength="6" required></label>
+      ${accMsg ? `<div class="err" role="alert">${esc(accMsg)}</div>` : ""}
+      <div class="row"><button class="btn primary" type="submit" data-kind="in"${accBusy ? " disabled" : ""}>${accBusy ? "One moment…" : "Sign in"}</button>
+        <button class="btn" type="submit" data-kind="up"${accBusy ? " disabled" : ""}>Create account</button></div>
+    </form>`;
+}
+function friendlyAuth(m){
+  m = String(m || "");
+  if (/invalid login/i.test(m)) return "That email and password don't match. Check them, or create an account.";
+  if (/already registered|already exists/i.test(m)) return "There's already an account with that email. Sign in instead.";
+  if (/password/i.test(m) && /6|short|least/i.test(m)) return "Use a password with at least 6 characters.";
+  if (/email/i.test(m) && /invalid|valid/i.test(m)) return "That email address doesn't look right.";
+  if (/fetch|network/i.test(m)) return "Couldn't reach the server. Check your connection.";
+  return m || "Something went wrong. Try again.";
+}
+$("#storeBadge").addEventListener("click", () => { if (!sb) return; const box = $("#account"); box.hidden = !box.hidden; accMsg = ""; renderAccount(); if (!box.hidden) $("#accEmail")?.focus(); });
+$("#account").addEventListener("click", async e => {
+  const b = e.target.closest("[data-acc]"); if (!b) return;
+  if (b.dataset.acc === "close") $("#account").hidden = true;
+  if (b.dataset.acc === "out") { await sb.auth.signOut(); $("#account").hidden = true; toast("Signed out. Your trips are safe in your account."); }
+});
+$("#account").addEventListener("submit", async e => {
+  e.preventDefault();
+  const kind = e.submitter?.dataset.kind || "in";
+  const email = $("#accEmail").value.trim(), password = $("#accPass").value;
+  if (!email || !password) { accMsg = "Enter your email and a password."; renderAccount(); return; }
+  if (password.length < 6) { accMsg = "Use a password with at least 6 characters."; renderAccount(); return; }
+  accBusy = true; accMsg = ""; renderAccount(); $("#accEmail").value = email;
+  const { data, error } = kind === "up" ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
+  accBusy = false;
+  if (error) { accMsg = friendlyAuth(error.message); renderAccount(); $("#accEmail").value = email; return; }
+  if (kind === "up" && !data.session) { accMsg = "Account made. Check your email to confirm it, then sign in."; renderAccount(); return; }
+  $("#account").hidden = true; toast(kind === "up" ? "Account created. Your trips now save to it." : "Signed in");
+});
+
+/* ---------- derived data ---------- */
+let viewing = null;                  // a friend's map being looked at: {profile, docs}
+const shown = () => viewing ? viewing.docs : docs;
+const VIEW_MSG = "You're looking at a friend's map. Go back to yours to make changes.";
+const all = kind => [...shown().entries()].filter(([,d]) => d && d.kind === kind).map(([id,d]) => ({id, ...d}));
+const visitedSet = () => new Set(all("country").map(c => c.name));
+function tripsSorted(){ return all("trip").sort((a,b) => (b.start||"").localeCompare(a.start||"") || (b.createdAt||0)-(a.createdAt||0)); }
+function tripColor(t){ return ROUTE_COLORS[(t.colorIdx ?? 0) % ROUTE_COLORS.length]; }
+function routeCoords(t){ return (t.days||[]).filter(d => num(d.lng) && num(d.lat)).map(d => [ +d.lng, +d.lat ]); }
+function routeKm(coords){ let km=0; for (let i=1;i<coords.length;i++) km += d3.geoDistance(coords[i-1], coords[i]) * EARTH_KM; return km; }
+function tripCountries(t){ return [...new Set((t.days||[]).map(d => d.country).filter(Boolean))]; }
+function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T12:00:00"); return isNaN(d) ? s : d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
+function fmtRange(a,b){ if(!a && !b) return "Dates not set"; if(!b || a===b) return fmtDate(a||b); return fmtDate(a) + " – " + fmtDate(b); }
+
+/* ---------- country name matching ---------- */
+const ALIASES = {
+  "usa":"United States of America","us":"United States of America","united states":"United States of America","america":"United States of America",
+  "uk":"United Kingdom","england":"United Kingdom","scotland":"United Kingdom","wales":"United Kingdom","northern ireland":"United Kingdom","great britain":"United Kingdom","britain":"United Kingdom",
+  "czech republic":"Czechia","holland":"Netherlands","the netherlands":"Netherlands","south korea":"South Korea","korea":"South Korea","republic of korea":"South Korea",
+  "uae":"United Arab Emirates","dubai":"United Arab Emirates","russia":"Russia","vatican city":"Vatican","ivory coast":"Côte d'Ivoire","cote d'ivoire":"Côte d'Ivoire",
+  "bosnia":"Bosnia and Herz.","bosnia and herzegovina":"Bosnia and Herz.","dominican republic":"Dominican Rep.","czechia":"Czechia","swaziland":"eSwatini","eswatini":"eSwatini",
+  "burma":"Myanmar","macedonia":"Macedonia","north macedonia":"Macedonia","drc":"Dem. Rep. Congo","democratic republic of the congo":"Dem. Rep. Congo",
+  "central african republic":"Central African Rep.","south sudan":"S. Sudan","equatorial guinea":"Eq. Guinea","solomon islands":"Solomon Is.","bali":"Indonesia","hong kong":"Hong Kong","tahiti":"Fr. Polynesia","french polynesia":"Fr. Polynesia"
+};
+function matchCountry(raw){
+  if (!raw) return null;
+  const s = String(raw).trim(); if (featByName.has(s)) return s;
+  const low = s.toLowerCase();
+  if (ALIASES[low] && featByName.has(ALIASES[low])) return ALIASES[low];
+  const hit = countryNames.find(n => n.toLowerCase() === low) || countryNames.find(n => n.toLowerCase().replace(/\./g,"") === low.replace(/\./g,""));
+  if (hit) return hit;
+  const starts = countryNames.filter(n => n.toLowerCase().startsWith(low));
+  return starts.length === 1 ? starts[0] : null;
+}
+function countryCentroid(name){ const f = featByName.get(name); return f ? d3.geoCentroid(f) : null; }
+function countryAt(lonlat){ const f = features.find(f => d3.geoContains(f, lonlat)); return f ? f.properties.name : null; }
+
+/* ---------- map ---------- */
+const svg = d3.select("#map");
+const gTiles = svg.append("g").attr("class","tiles");
+const root = svg.append("g");
+const gSphere = root.append("path").attr("class","sphere");
+const gImg = root.append("image").attr("class","sat-img").attr("preserveAspectRatio","none");
+const gGrat = root.append("path").attr("class","grat");
+const gCountries = root.append("g");
+const gCPhotos = root.append("g").attr("class", "cphotos");
+const gRoutes = root.append("g");
+const gStops = root.append("g");
+const gCities = root.append("g");
+const gLabels = root.append("g");
+const gFound = root.append("g");
+const projNE = d3.geoNaturalEarth1(), projEQ = d3.geoEquirectangular(), projMC = d3.geoMercator();
+let mapStyle = "map";
+let projection = projNE;
+const path = d3.geoPath(projection);
+if (path.digits) path.digits(6);     // street view zooms in far enough that rounding would shift borders
+let k = 1, W = 800, H = 500;
+const zoom = d3.zoom().scaleExtent([1, 40]).on("zoom", e => { root.attr("transform", e.transform); k = e.transform.k; drawTiles(e.transform); sizeMarks(); hideTip(); hidePin(); });
+svg.call(zoom).on("dblclick.zoom", null);
+
+function sizeMarks(){
+  gCities.selectAll("circle").attr("r", 4.6 / k * Math.min(k, 2.2));
+  gStops.selectAll("circle").attr("r", 3 / k * Math.min(k, 2));
+  gFound.select(".found-ring").attr("r", 14 / k * Math.min(k, 2));
+  gFound.select(".found-dot").attr("r", 4.5 / k * Math.min(k, 2));
+  gLabels.selectAll("text").attr("font-size", 11.5 / k).attr("dy", -8 / k).style("stroke-width", 3 / k + "px").attr("display", k >= 2.5 ? null : "none");
+}
+function layout(){
+  const r = $("#mapwrap").getBoundingClientRect(); W = Math.max(300, r.width); H = Math.max(240, r.height);
+  svg.attr("viewBox", `0 0 ${W} ${H}`);
+  if (mapStyle === "street") projection.scale(W / (2 * Math.PI)).translate([W / 2, H / 2]);
+  else projection.fitExtent([[10, 56], [W - 10, H - 46]], {type:"Sphere"});
+  if (mapStyle === "sat") { const [[x0,y0],[x1,y1]] = path.bounds({type:"Sphere"}); gImg.attr("x", x0).attr("y", y0).attr("width", x1 - x0).attr("height", y1 - y0); }
+  zoom.translateExtent(mapStyle === "street" ? [[0, H/2 - W/2], [W, H/2 + W/2]] : [[-W*0.5, -H*0.5],[W*1.5, H*1.5]]);
+  drawTiles();
+  gSphere.datum({type:"Sphere"}).attr("d", path);
+  gGrat.datum(d3.geoGraticule10()).attr("d", path);
+  gCountries.selectAll("path").attr("d", path);
+  drawOverlay(); drawFound();
+}
+new ResizeObserver(() => layout()).observe($("#mapwrap"));
+
+function drawCountries(){
+  gCountries.selectAll("path").data(features, d => d.properties.name).join("path")
+    .attr("class","country").attr("d", path)
+    .on("mousemove", (e,d) => { const c = shown().get("c_" + slug(d.properties.name)); let t = d.properties.name;
+      if (c) t += mode !== "country" || viewing ? " · visited" : (c.color || null) === fillColor || c.photo ? " · tap for photo and options" : " · tap to recolour";
+      else if (mode === "country") t += " · tap to mark";
+      showTip(e, t); })
+    .on("mouseleave", hideTip)
+    .on("click", (e,d) => { if (mode === "country") toggleCountry(d.properties.name); });
+}
+// a visited country can show a photo clipped to its outline
+function drawCountryPhotos(){
+  const list = all("country").filter(c => c.photo && featByName.has(c.name) && (c.photo.data || (c.photo.path && store.mode === "cloud")));
+  const sel = gCPhotos.selectAll("g.cphoto").data(list, d => d.id + "|" + (d.photo.path || "local"))
+    .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("image").attr("preserveAspectRatio", "xMidYMid slice"); g.append("path").attr("class", "cp-outline"); return g; });
+  sel.each(function(d){
+    const f = featByName.get(d.name), shape = path(f), [[x0, y0], [x1, y1]] = path.bounds(f), g = d3.select(this), cid = "cclip-" + d.id;
+    g.select("clipPath").attr("id", cid).select("path").attr("d", shape);
+    const im = g.select("image").attr("clip-path", `url(#${cid})`).attr("x", x0).attr("y", y0).attr("width", Math.max(0, x1 - x0)).attr("height", Math.max(0, y1 - y0));
+    if (d.photo.data) im.attr("href", d.photo.data); else im.attr("data-path", d.photo.path);
+    g.select(".cp-outline").attr("d", shape);
+  });
+  hydrateCountryPhotos();
+}
+async function hydrateCountryPhotos(){
+  const ims = gCPhotos.selectAll("image").nodes().filter(n => n.dataset.path && !n.getAttribute("href"));
+  if (!ims.length) return;
+  await signUrls(ims.map(n => n.dataset.path));
+  ims.forEach(n => { const u = urlCache.get(n.dataset.path)?.url; if (u) n.setAttribute("href", u); });
+}
+async function setCountryPhoto(name, file){
+  const id = "c_" + slug(name); if (!docs.get(id) || !file) return;
+  toast("Adding your photo…");
+  try {
+    let photo;
+    if (store.mode === "cloud") {
+      const blob = await shrink(file, 1800), p = `${cloudUser.id}/${id}/${uid()}.jpg`;
+      const { error } = await sb.storage.from(BUCKET).upload(p, blob, {contentType:"image/jpeg"}); if (error) throw error;
+      photo = {path:p};
+    } else {   // no photo storage here, so keep a small copy inside the saved country
+      const blob = await shrink(file, 700);
+      photo = {data: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); })};
+    }
+    const old = docs.get(id)?.photo;
+    await store.put(id, {...docs.get(id), photo});
+    if (old?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([old.path]);
+    toast(`${name} is filled with your photo`);
+  } catch { toast("Couldn't add that photo. Try a JPEG."); }
+  renderFound();
+}
+async function removeCountryPhoto(name){
+  const id = "c_" + slug(name), cur = docs.get(id); if (!cur?.photo) return;
+  if (cur.photo.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([cur.photo.path]);
+  const { photo, ...rest } = cur;
+  await store.put(id, rest); toast("Photo removed"); renderFound();
+}
+function drawOverlay(){
+  const v = visitedSet();
+  const fills = new Map(all("country").map(c => [c.name, c.color || null]));
+  gCountries.selectAll("path").classed("visited", d => v.has(d.properties.name)).style("fill", d => fills.get(d.properties.name) || null);
+  drawCountryPhotos();
+  const live = wiz ? {days: wiz.stops.concat(num(wiz.next.lat) ? [wiz.next] : [])} : draft;
+  // routes
+  const routes = [];
+  tripsSorted().forEach(t => { const ds = t.days || []; for (let i = 1; i < ds.length; i++) { const a = ds[i-1], b = ds[i];
+    if (num(a.lat) && num(a.lng) && num(b.lat) && num(b.lng)) routes.push({id:`${t.id}:${i}`, trip:t.id, color:tripColor(t), mode:b.transport || "", coords:[[+a.lng, +a.lat], [+b.lng, +b.lat]]}); } });
+  if (live && routeCoords(live).length > 1) routes.push({id:"__draft", draft:true, coords:routeCoords(live)});
+  gRoutes.selectAll("path").data(routes, d => d.id).join("path")
+    .attr("class", d => "route" + (d.draft ? " draft" : d.mode ? " m-" + d.mode : ""))
+    .attr("d", d => path({type:"LineString", coordinates:d.coords}))
+    .attr("stroke", d => d.draft ? null : d.color)
+    .classed("faded", d => selectedTrip && d.trip !== selectedTrip && !d.draft);
+  // trip stops (draft + selected)
+  const stops = [];
+  if (live) routeCoords(live).forEach((c,i) => stops.push({id:"d"+i, c, color:"var(--accent)"}));
+  else if (openTrip && shown().get(openTrip)) { const ot = shown().get(openTrip); routeCoords(ot).forEach((c,i) => stops.push({id:"o"+i, c, color:tripColor(ot)})); }
+  // cities
+  const cities = all("city").filter(c => num(c.lat) && num(c.lng));
+  gStops.selectAll("circle").data(stops, d => d.id).join("circle").attr("class","stop")
+    .attr("cx", d => projection(d.c)[0]).attr("cy", d => projection(d.c)[1]).attr("stroke", d => d.color);
+  gCities.selectAll("circle").data(cities, d => d.id).join("circle").attr("class","city")
+    .attr("cx", d => projection([d.lng, d.lat])[0]).attr("cy", d => projection([d.lng, d.lat])[1])
+    .on("mousemove", (e,d) => showTip(e, d.name + (d.country ? ", " + d.country : "") + (d.approx ? " (approximate)" : "")))
+    .on("mouseleave", hideTip)
+    .on("click", (e,d) => { e.stopPropagation(); if (mode === "wizpick" && wiz) setWizSpot([d.lng, d.lat], d.name, d.country); });
+  gLabels.selectAll("text").data(cities, d => d.id).join("text").attr("class","label").attr("text-anchor","middle")
+    .attr("x", d => projection([d.lng, d.lat])[0]).attr("y", d => projection([d.lng, d.lat])[1]).text(d => d.name);
+  sizeMarks();
+}
+const tip = $("#tip");
+function showTip(e, text){ const r = $("#mapwrap").getBoundingClientRect(); tip.textContent = text; tip.style.left = (e.clientX - r.left) + "px"; tip.style.top = (e.clientY - r.top) + "px"; tip.hidden = false; }
+function hideTip(){ tip.hidden = true; }
+
+svg.on("click", e => {
+  if ((mode !== "pin" && mode !== "wizpick") || e.defaultPrevented) return;
+  const [x,y] = d3.pointer(e, root.node());
+  const ll = projection.invert([x,y]);
+  if (!ll || !num(ll[0])) return;
+  if (mode === "wizpick") { if (wiz) setWizSpot(ll); return; }
+  openPin(e, ll);
+});
+$("#zIn").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.8);
+$("#zOut").onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1/1.8);
+$("#zReset").onclick = () => svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity);
+function zoomTo(coords){
+  if (!coords.length) return;
+  const pts = coords.map(c => projection(c));
+  const [x0,x1] = d3.extent(pts, p => p[0]), [y0,y1] = d3.extent(pts, p => p[1]);
+  const s = Math.max(1, Math.min(mapStyle === "street" ? 2 ** 11 : 12, 0.75 / Math.max((x1-x0+30)/W, (y1-y0+30)/H)));
+  svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s).translate(-(x0+x1)/2, -(y0+y1)/2));
+}
+
+/* map style */
+/* OpenStreetMap tiles: only load where the page may reach other sites (not inside Claude) */
+const TILE_URL = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+function drawTiles(t = d3.zoomTransform(svg.node())){
+  if (mapStyle !== "street") { gTiles.selectAll("image").remove(); gCountries.style("opacity", null); gCPhotos.style("opacity", null); return; }
+  const s0 = projection.scale(), [tx0, ty0] = projection.translate();
+  const S = 2 * Math.PI * s0 * t.k, Ox = t.k * (tx0 - Math.PI * s0) + t.x, Oy = t.k * (ty0 - Math.PI * s0) + t.y;
+  const z = Math.max(0, Math.min(19, Math.round(Math.log2(S / 256)))), n = 2 ** z, ts = S / n;
+  gCountries.style("opacity", Math.max(0, Math.min(1, (10 - z) / 3))); gCPhotos.style("opacity", gCountries.style("opacity"));   // country outlines are too coarse for street level, so fade them out
+  const tiles = [];
+  const x0 = Math.max(0, Math.floor(-Ox / ts)), x1 = Math.min(n - 1, Math.floor((W - Ox) / ts));
+  const y0 = Math.max(0, Math.floor(-Oy / ts)), y1 = Math.min(n - 1, Math.floor((H - Oy) / ts));
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) tiles.push({z, x, y, key:`${z}/${x}/${y}`});
+  gTiles.selectAll("image").data(tiles, d => d.key).join("image").attr("href", d => TILE_URL(d.z, d.x, d.y))
+    .attr("x", d => Ox + d.x * ts).attr("y", d => Oy + d.y * ts).attr("width", ts + 0.5).attr("height", ts + 0.5);
+}
+let streetOK = false;
+function probeStreet(){
+  const img = new Image();
+  img.onload = () => { streetOK = true; $("#styleStreet").hidden = false; try { if (localStorage.getItem(LS_KEY + ".style") === "street") setStyle("street"); } catch {} };
+  img.src = TILE_URL(0, 0, 0);
+}
+const cityK = () => mapStyle === "street" ? 2 ** 13 * 256 / (2 * Math.PI * projection.scale()) : 7;
+
+function setStyle(st){
+  mapStyle = st === "sat" ? "sat" : st === "street" && streetOK ? "street" : "map";
+  projection = mapStyle === "sat" ? projEQ : mapStyle === "street" ? projMC : projNE; path.projection(projection);
+  zoom.scaleExtent([1, mapStyle === "street" ? 2 ** 14 : 40]);
+  $("#mapwrap").classList.toggle("street", mapStyle === "street");
+  $("#styleStreet").setAttribute("aria-pressed", mapStyle === "street");
+  $("#attrib").hidden = mapStyle !== "street";
+  if (mapStyle === "sat" && !gImg.attr("href")) gImg.on("error", () => toast("The satellite image didn't load. Reload to try again.")).attr("href", "earth.jpg");
+  $("#mapwrap").classList.toggle("sat", mapStyle === "sat");
+  $("#styleMap").setAttribute("aria-pressed", mapStyle === "map"); $("#styleSat").setAttribute("aria-pressed", mapStyle === "sat");
+  try { localStorage.setItem(LS_KEY + ".style", mapStyle); } catch {}
+  svg.call(zoom.transform, d3.zoomIdentity); layout();
+}
+$("#styleMap").onclick = () => setStyle("map");
+$("#styleSat").onclick = () => setStyle("sat");
+$("#styleStreet").onclick = () => setStyle("street");
+
+/* search */
+const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+let CITIES = null, citiesLoading = null, results = [], active = -1, found = null;
+function loadCities(){
+  if (!citiesLoading) citiesLoading = fetch("cities.json").then(r => r.json()).then(rows => {
+    CITIES = rows.map(r => ({name:r[0], key:norm(r[0]), alt:r[1] ? norm(r[1]) : "", country:matchCountry(r[2]) || r[2], lat:r[3], lng:r[4], pop:r[5]}));
+    if ($("#q").value.trim()) runSearch();
+    return CITIES;
+  }).catch(() => { citiesLoading = null; return null; });
+  return citiesLoading;
+}
+function editDist(a, b, max){   // Levenshtein, giving up once it's clearly over max
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++) { cur[j] = Math.min(prev[j] + 1, cur[j-1] + 1, prev[j-1] + (a[i-1] === b[j-1] ? 0 : 1)); if (cur[j] < best) best = cur[j]; }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+// Cities for a typed name ("lisb", "paris, fr"): your saved cities, then the built-in list by size, then near-misses for typos
+function cityMatches(raw, {limit = 7, country = ""} = {}){
+  const parts = String(raw).split(","); const nq = norm(parts[0]); const cq = norm(parts.slice(1).join(",")) || norm(country);
+  if (!nq) return [];
+  const inCountry = c => !cq || norm(c.country).startsWith(cq);
+  const out = [], seen = new Set();
+  const push = (c, extra) => { const key = norm(c.name) + "|" + c.country; if (seen.has(key) || out.length >= limit) return; seen.add(key); out.push({type:"city", name:c.name, country:c.country, lat:+c.lat, lng:+c.lng, pop:c.pop, ...extra}); };
+  for (const c of all("city")) if (norm(c.name).startsWith(nq) && inCountry(c)) push(c, {saved:true});
+  if (CITIES) {
+    for (const c of CITIES) { if (out.length >= limit) break; if ((c.key.startsWith(nq) || (c.alt && c.alt.startsWith(nq))) && inCountry(c)) push(c); }
+    if (out.length < 3 && nq.length >= 3) for (const c of CITIES) { if (out.length >= limit) break; if (c.key.includes(nq) && inCountry(c)) push(c); }
+    if (out.length < 3 && nq.length >= 4) {
+      const max = nq.length >= 7 ? 2 : 1; let scanned = 0;
+      for (const c of CITIES) {
+        if (out.length >= limit || ++scanned > 15000) break;
+        if (inCountry(c) && (editDist(nq, c.key.slice(0, nq.length), max) <= max || editDist(nq, c.key.slice(0, nq.length + 1), max) <= max)) push(c, {fuzzy:true});
+      }
+    }
+  }
+  return out;
+}
+const RECENT_KEY = LS_KEY + ".recent";
+function getRecent(){ try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; } }
+function addRecent(r){
+  const item = r.type === "country" ? {type:"country", name:r.name} : {type:"city", name:r.name, country:r.country, lat:r.lat, lng:r.lng};
+  const list = [item, ...getRecent().filter(x => !(x.type === item.type && x.name === item.name && (x.country || "") === (item.country || "")))].slice(0, 5);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch {}
+}
+function fmtPop(n){ return n >= 1e6 ? (n/1e6).toFixed(n >= 1e7 ? 0 : 1) + "M people" : n >= 1e3 ? Math.round(n/1e3) + "k people" : ""; }
+function runSearch(){
+  const raw = $("#q").value; const parts = raw.split(","); const nq = norm(parts[0]); const cq = norm(parts.slice(1).join(","));
+  results = []; active = -1;
+  if (!nq) {   // empty box: recent searches, then cities already on your map
+    if (document.activeElement !== $("#q")) { closeResults(); return; }
+    getRecent().forEach(r => results.push({...r, recent:true}));
+    all("city").sort((a,b) => (b.addedAt||0) - (a.addedAt||0)).forEach(c => { if (results.length < 7 && !results.some(r => r.type === "city" && r.name === c.name && r.country === c.country)) results.push({type:"city", name:c.name, country:c.country, lat:c.lat, lng:c.lng, saved:true}); });
+    if (results.length) renderResults(); else closeResults();
+    return;
+  }
+  if (!cq) {
+    const aliasHit = ALIASES[nq] && featByName.has(ALIASES[nq]) ? [ALIASES[nq]] : [];
+    const cs = [...new Set([...aliasHit, ...countryNames.filter(n => norm(n).startsWith(nq))])].slice(0, 3);
+    cs.forEach(n => results.push({type:"country", name:n}));
+  }
+  results.push(...cityMatches(raw, {limit: 7}));
+  // countries that only contain the text ("lis" in "Wallis") go last
+  if (!cq && nq.length >= 3) countryNames.filter(n => !norm(n).startsWith(nq) && norm(n).includes(nq)).slice(0, 2).forEach(n => results.push({type:"country", name:n}));
+  if (sample !== false && nq.length >= 3) results.push({type:"ai", q:raw.trim()});
+  renderResults();
+}
+function renderResults(){
+  const ul = $("#qres"); const v = visitedSet();
+  if (!results.length) ul.innerHTML = `<li class="empty">${CITIES ? "No matches. Try another spelling." : "Loading cities…"}</li>`;
+  else ul.innerHTML = results.map((r,i) => `<li role="option" id="qr${i}" data-i="${i}" aria-selected="${i === active}">${
+    r.type === "country" ? `<span class="ic c">C</span><span class="grow"><span class="nm">${esc(r.name)}</span><div class="sub">Country${r.recent ? " · recent" : v.has(r.name) ? " · visited" : ""}</div></span>`
+    : r.type === "city" ? `<span class="ic p"></span><span class="grow"><span class="nm">${esc(r.name)}</span><div class="sub">${esc(r.country)}${r.recent ? " · recent" : r.saved ? " · on your map" : r.fuzzy ? " · did you mean this?" : r.pop ? " · " + fmtPop(r.pop) : ""}</div></span>`
+    : `<span class="ic ai">AI</span><span class="grow"><span class="nm">Find “${esc(r.q)}” with AI</span><div class="sub">For smaller towns and landmarks</div></span>`}</li>`).join("");
+  ul.hidden = false; $("#q").setAttribute("aria-expanded", "true");
+  $("#q").setAttribute("aria-activedescendant", active >= 0 ? "qr" + active : "");
+  updateGhost();
+}
+function closeResults(){ $("#qres").hidden = true; $("#q").setAttribute("aria-expanded", "false"); updateGhost(); }
+// grey inline completion: "Lis" + "bon, Portugal"; Tab or → accepts
+function ghostTarget(){
+  const raw = $("#q").value, top = results.find(r => r.type !== "ai" && !r.fuzzy);
+  if (!raw || !top || $("#qres").hidden) return null;
+  const label = top.type === "city" ? `${top.name}, ${top.country}` : top.name;
+  return label.toLowerCase().startsWith(raw.toLowerCase()) && label.length > raw.length ? {top, rest: label.slice(raw.length)} : null;
+}
+function updateGhost(){
+  const g = ghostTarget(), q = $("#q");
+  $("#qGhost").innerHTML = g && q.selectionStart === q.value.length ? `<span class="gt">${esc(q.value)}</span>${esc(g.rest)}` : "";
+}
+async function choose(r){
+  closeResults(); if (!r) return;
+  if (r.type !== "ai") addRecent(r);
+  if (r.type === "country") { $("#q").value = r.name; showFound({type:"country", name:r.name}); zoomToFeature(featByName.get(r.name)); return; }
+  if (r.type === "city") { $("#q").value = r.name + ", " + r.country; showFound({...r}); zoomToPoint([r.lng, r.lat]); return; }
+  const s = await getSample(); if (!s) { sample = false; toast("The AI isn't available here. Try a nearby bigger city."); return; }
+  toast(`Looking up ${r.q}…`);
+  const parts = r.q.split(","); const [g] = await geocode([{city:parts[0].trim(), country:parts.slice(1).join(",").trim()}]);
+  if (!g || !num(g.lat) || !num(g.lng)) { toast(`Couldn't find "${r.q}". Try adding the country, like "Hallstatt, Austria".`); return; }
+  const city = {type:"city", name:parts[0].trim(), country:matchCountry(g.country) || g.country || "", lat:+g.lat, lng:+g.lng};
+  showFound(city); zoomToPoint([city.lng, city.lat]);
+}
+function zoomToFeature(f){
+  if (!f) return;
+  const [[x0,y0],[x1,y1]] = path.bounds(f);
+  const s = Math.max(1, Math.min(mapStyle === "street" ? 2 ** 10 : 20, 0.8 / Math.max((x1-x0)/W, (y1-y0)/H)));
+  svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s).translate(-(x0+x1)/2, -(y0+y1)/2));
+}
+function zoomToPoint(ll, s){ const [x,y] = projection(ll); svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s || Math.max(k, cityK())).translate(-x, -y)); }
+function drawFound(){
+  const pts = found && found.type === "city" ? [found] : [];
+  const sel = gFound.selectAll("g").data(pts).join(enter => { const g = enter.append("g"); g.append("circle").attr("class","found-ring"); g.append("circle").attr("class","found-dot"); return g; });
+  sel.attr("transform", d => { const [x,y] = projection([d.lng, d.lat]); return `translate(${x},${y})`; });
+  sizeMarks();
+}
+function showFound(f){ found = f; renderFound(); drawFound(); }
+function renderFound(){
+  const box = $("#found"); if (!found || found.quiet) { box.hidden = true; return; }
+  const f = found, v = visitedSet();
+  let body;
+  if (f.type === "country") {
+    const cdoc = shown().get("c_" + slug(f.name)), on = !!cdoc;
+    if (viewing) body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited by " + esc(firstName(viewing.profile)) : "Not visited"}</span></div>`;
+    else body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited" : "Country"}</span></div>
+      ${on ? `<p class="hint" style="margin:0">${cdoc.photo ? "Filled with your photo." : "Fill the country's shape on the map with one of your photos."}</p>
+      <div class="row"><label class="btn primary sm" style="cursor:pointer">${cdoc.photo ? "Change photo" : "Fill with a photo"}<input type="file" accept="image/*" data-cphoto hidden></label>
+        ${cdoc.photo ? `<button class="btn sm" data-f="rmcphoto">Remove photo</button>` : ""}
+        ${(cdoc.color || null) !== fillColor ? `<button class="btn sm" data-f="recolour">Use the selected colour</button>` : ""}
+        <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`
+      : `<div class="row"><button class="btn primary sm" data-f="country">Mark as visited</button></div>`}`;
+  } else {
+    const id = "p_" + slug(f.name + "-" + (f.country || "")), saved = docs.has(id);
+    body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${saved ? "On your map" : "City"}</span></div>
+      <div class="hint">${esc(f.country || "")}${f.country ? " · " : ""}<span class="mono">${fmtLL(f.lat, f.lng)}</span>${f.pop ? " · " + fmtPop(f.pop) : ""}</div>
+      ${viewing ? "" : `<div class="row">${saved ? `<button class="btn sm" data-f="uncity">Remove from my cities</button>` : `<button class="btn primary sm" data-f="city">Add to my cities</button>`}
+        ${wiz && wiz.phase === "stops" ? `<button class="btn sm" data-f="stop">Use as step ${wiz.stops.length + 1}</button>` : ""}
+        ${f.country && featByName.has(f.country) && !v.has(f.country) ? `<button class="btn ghost sm" data-f="country">Mark ${esc(f.country)} visited</button>` : ""}</div>`}`;
+  }
+  box.innerHTML = `<button class="btn ghost sm" data-f="close" aria-label="Close" style="position:absolute;right:6px;top:6px">×</button>` + body;
+  box.hidden = false;
+}
+$("#found").addEventListener("click", e => {
+  const b = e.target.closest("[data-f]"); if (!b || !found) return; const f = found, a = b.dataset.f;
+  if (a === "close") { found = null; renderFound(); drawFound(); return; }
+  if (a === "country") { const n = f.type === "country" ? f.name : f.country; addCountry(n, true); if (fillColor) { const id = "c_" + slug(n); store.put(id, {...docs.get(id), color:fillColor}); } toast(`Marked ${n} as visited`); }
+  if (a === "uncountry") { const ph = docs.get("c_" + slug(f.name))?.photo; if (ph?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([ph.path]); store.remove("c_" + slug(f.name)); toast(`Removed ${f.name}`); }
+  if (a === "rmcphoto") { removeCountryPhoto(f.name); return; }
+  if (a === "recolour") { const id = "c_" + slug(f.name); store.put(id, {...docs.get(id), color:fillColor}); toast(`Recoloured ${f.name}`); }
+  if (a === "city") { addCity({name:f.name, country:f.country, lat:f.lat, lng:f.lng}); toast(`Added ${f.name} to your cities`); }
+  if (a === "uncity") { store.remove("p_" + slug(f.name + "-" + (f.country || ""))); toast(`Removed ${f.name}`); }
+  if (a === "stop" && wiz) { setWizSpot([f.lng, f.lat], f.name, f.country); showTab("trips"); }
+  renderFound();
+});
+$("#found").addEventListener("change", e => { if (e.target.dataset.cphoto !== undefined && e.target.files?.[0] && found?.type === "country") setCountryPhoto(found.name, e.target.files[0]); });
+let qT;
+$("#q").addEventListener("focus", () => { loadCities(); runSearch(); });
+$("#q").addEventListener("input", () => { loadCities(); clearTimeout(qT); qT = setTimeout(runSearch, 90); });
+$("#q").addEventListener("keydown", e => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (!results.length) return; e.preventDefault(); active = (active + (e.key === "ArrowDown" ? 1 : -1) + results.length) % results.length; renderResults(); $("#qr" + active)?.scrollIntoView({block:"nearest"}); }
+  else if (e.key === "Enter") { e.preventDefault(); clearTimeout(qT); runSearch(); choose(results[Math.max(active, 0)]); }
+  else if (e.key === "Escape") closeResults();
+  else if ((e.key === "Tab" || e.key === "ArrowRight") && !e.shiftKey) { const g = ghostTarget(); const q = $("#q"); if (g && q.selectionStart === q.value.length) { e.preventDefault(); choose(g.top); } }
+});
+$("#qres").addEventListener("mousedown", e => { const li = e.target.closest("[data-i]"); if (li) { e.preventDefault(); choose(results[+li.dataset.i]); } });
+document.addEventListener("click", e => { if (!e.target.closest("#search")) closeResults(); });
+
+/* map modes + pin form */
+function setMode(m){ mode = m; $("#modeCountry").setAttribute("aria-pressed", m==="country"); $("#modePin").setAttribute("aria-pressed", m==="pin"); $("#mapwrap").classList.toggle("pinmode", m==="pin" || m==="wizpick"); $("#swatches").hidden = m !== "country"; hidePin(); if (m==="pin") toast("Tap the map where the city is"); if (m==="wizpick") toast("Tap the map where this step was"); }
+
+/* fill colour */
+function renderSwatches(){
+  $("#swatchBtns").innerHTML = FILLS.map(f => `<button class="sw-btn" role="radio" aria-checked="${fillColor === f.c}" aria-label="${f.name}" title="${f.name}" data-fill="${f.c || ""}" style="--sw:${f.c || "var(--visited)"}"></button>`).join("");
+  const custom = fillColor && !FILLS.some(f => f.c === fillColor);
+  $("#swCustom").classList.toggle("on", !!custom);
+  if (custom) { $("#swCustom").style.background = fillColor; $("#customColor").value = fillColor; } else $("#swCustom").style.background = "";
+}
+function setFill(c){ fillColor = c || null; try { localStorage.setItem(LS_KEY + ".fill", fillColor || ""); } catch {} renderSwatches(); }
+$("#swatchBtns").addEventListener("click", e => { const b = e.target.closest("[data-fill]"); if (b) setFill(b.dataset.fill); });
+$("#customColor").addEventListener("input", e => setFill(e.target.value.toUpperCase()));
+$("#modeCountry").onclick = () => setMode("country");
+$("#modePin").onclick = () => setMode("pin");
+let pinLL = null;
+function openPin(e, ll){
+  pinLL = ll; const f = $("#pinform"); const r = $("#mapwrap").getBoundingClientRect();
+  $("#pinCoords").textContent = fmtLL(ll[1], ll[0]);
+  $("#pinName").value = ""; $("#pinCountry").value = countryAt(ll) || "";
+  f.hidden = false;
+  const x = Math.min(e.clientX - r.left + 12, r.width - f.offsetWidth - 10), y = Math.min(e.clientY - r.top + 12, r.height - f.offsetHeight - 10);
+  f.style.left = Math.max(10, x) + "px"; f.style.top = Math.max(10, y) + "px";
+  $("#pinName").focus();
+}
+function hidePin(){ $("#pinform").hidden = true; }
+$("#pinCancel").onclick = hidePin;
+$("#pinform").addEventListener("submit", e => {
+  e.preventDefault(); const name = $("#pinName").value.trim(); if (!name || !pinLL) return;
+  const country = matchCountry($("#pinCountry").value) || countryAt(pinLL);
+  addCity({name, country, lat:pinLL[1], lng:pinLL[0]}); hidePin(); toast(`Pinned ${name}`);
+});
+function fmtLL(lat, lng){ return `${Math.abs(lat).toFixed(2)}°${lat>=0?"N":"S"} ${Math.abs(lng).toFixed(2)}°${lng>=0?"E":"W"}`; }
+
+/* ---------- mutations ---------- */
+function toggleCountry(name){
+  const id = "c_" + slug(name), cur = shown().get(id);
+  if (viewing) { showFound({type:"country", name}); return; }
+  if (cur && (cur.color || null) !== fillColor && !cur.photo) { store.put(id, {...cur, color:fillColor}); toast(`Recoloured ${name}. Tap it again to add a photo.`); }
+  else if (cur) showFound({type:"country", name});
+  else { store.put(id, {kind:"country", name, color:fillColor, addedAt:Date.now()}); toast(`Marked ${name} as visited. Tap it again to fill it with a photo.`); }
+}
+// places that only come from private ("Only me") trips stay private; seeing them anywhere else shares them with followers
+function addCountry(name, quiet, priv = false){
+  const id = "c_" + slug(name), cur = docs.get(id);
+  if (!cur) store.put(id, {kind:"country", name, addedAt:Date.now(), ...(priv ? {private:true} : {})});
+  else if (cur.private && !priv) store.put(id, {...cur, private:false});
+  else if (!quiet) toast(`${name} is already on your map`);
+}
+function addCity(c){
+  const id = "p_" + slug(c.name + "-" + (c.country||""));
+  const prev = docs.get(id), priv = !!c.private && (!prev || !!prev.private);
+  if (prev && !prev.approx && c.approx) { if (prev.private && !priv) store.put(id, {...prev, private:false}); }
+  else store.put(id, {kind:"city", name:c.name, country:c.country||"", lat:+c.lat, lng:+c.lng, approx:!!c.approx, addedAt:prev?.addedAt || Date.now(), ...(priv ? {private:true} : {})});
+  if (c.country) addCountry(c.country, true, !!c.private);
+}
+function sharePlacesOf(t){ (t.days || []).forEach(d => { if (d.city && num(d.lat)) addCity({name:d.city, country:d.country, lat:d.lat, lng:d.lng, approx:d.approx}); else if (d.country && featByName.has(d.country)) addCountry(d.country, true); }); }
+
+/* ---------- AI helpers ---------- */
+async function getSample(){ if (sample !== null) return sample; try { sample = window.claude?.use ? await window.claude.use("sample") : null; } catch { sample = null; } return sample; }
+function aiErr(e){
+  if (e?.code === "not_granted") { sample = false; return "AI access wasn't allowed for this page, so you can add trips by hand instead."; }
+  if (e?.code === "rate_limited") return "The AI is busy. Wait a moment and try again.";
+  return "The AI couldn't answer that one. Try rephrasing, or add it by hand.";
+}
+async function geocode(list){ // list of {city, country} -> [{lat,lng,country}|null]
+  const s = await getSample(); if (!s) return list.map(() => null);
+  const prompt = `Return the latitude and longitude of each place as JSON.
+Each country must be written exactly as one of these names: ${countryNames.join(" | ")}.
+Places:
+${list.map((p,i) => `${i+1}. ${p.city}${p.country ? ", " + p.country : ""}`).join("\n")}
+Reply with only: {"places":[{"lat":number,"lng":number,"country":"exact name from list"}]} in the same order. Use null for a place you can't identify.`;
+  try { const r = await s.json(prompt, {modelTier:"quick"}); return list.map((_,i) => r?.places?.[i] || null); }
+  catch(e){ return list.map(() => null); }
+}
+
+/* ---------- trips ---------- */
+function nextColorIdx(){ const used = all("trip").map(t => t.colorIdx ?? 0); for (let i=0;i<ROUTE_COLORS.length;i++) if (!used.includes(i)) return i; return used.length % ROUTE_COLORS.length; }
+async function resolveDays(days){
+  const need = days.map((d,i) => ({d,i})).filter(({d}) => d.city && !(num(d.lat) && num(d.lng)));
+  // reuse coordinates of cities already on the map
+  for (const {d} of need) { const known = all("city").find(c => c.name.toLowerCase() === d.city.toLowerCase() && (!d.country || c.country === d.country) && !c.approx); if (known) { d.lat = known.lat; d.lng = known.lng; d.country = d.country || known.country; } }
+  // then the built-in city list (works everywhere, no AI needed)
+  if (need.some(({d}) => !(num(d.lat) && num(d.lng)))) {
+    const list = await loadCities();
+    if (list) for (const {d} of need) {
+      if (num(d.lat) && num(d.lng)) continue;
+      const key = norm(d.city), ctry = matchCountry(d.country);
+      const hit = list.find(c => (c.key === key || c.alt === key) && (!ctry || c.country === ctry));
+      if (hit) { d.lat = hit.lat; d.lng = hit.lng; d.country = ctry || hit.country; }
+    }
+  }
+  const still = need.filter(({d}) => !(num(d.lat) && num(d.lng)));
+  if (still.length) {
+    const res = await geocode(still.map(({d}) => ({city:d.city, country:d.country})));
+    still.forEach(({d}, j) => { const g = res[j]; if (g && num(g.lat) && num(g.lng)) { d.lat = +g.lat; d.lng = +g.lng; d.country = matchCountry(d.country) || matchCountry(g.country) || d.country; } });
+  }
+  for (const d of days) {
+    d.country = matchCountry(d.country) || d.country || "";
+    if (d.city && !(num(d.lat) && num(d.lng))) { const c = countryCentroid(d.country); if (c) { d.lng = c[0]; d.lat = c[1]; d.approx = true; } }
+    if (!d.city && d.country && !(num(d.lat) && num(d.lng))) { const c = countryCentroid(d.country); if (c) { d.lng = c[0]; d.lat = c[1]; d.approx = true; } }
+  }
+  return days;
+}
+async function saveTrip(t, source){
+  const id = t.id || "t_" + uid();
+  const prev = docs.get(id);
+  const days = await resolveDays((t.days||[]).map(d => ({...d})));
+  const trip = {kind:"trip", title:t.title || "Untitled trip", start:t.start||"", end:t.end||"", companions:t.companions||"", rating:t.rating||"", notes:t.notes||"",
+    days: days.map(d => ({date:d.date||"", until:d.until||"", transport:d.transport||"", city:d.city||"", country:d.country||"", notes:d.notes||"", lat:num(d.lat)?+d.lat:null, lng:num(d.lng)?+d.lng:null, approx:!!d.approx})),
+    photos: t.photos ?? prev?.photos ?? [], cover: t.cover ?? prev?.cover ?? "",
+    visibility: t.visibility || prev?.visibility || "followers",
+    source: prev?.source || source, colorIdx: prev?.colorIdx ?? nextColorIdx(), createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now()};
+  if (!trip.start) trip.start = trip.days.map(d => d.date).filter(Boolean).sort()[0] || "";
+  if (!trip.end) trip.end = trip.days.map(d => d.until || d.date).filter(Boolean).sort().pop() || "";
+  await store.put(id, trip);
+  for (const d of trip.days) {
+    const priv = trip.visibility === "private";
+    if (d.city && num(d.lat)) addCity({name:d.city, country:d.country, lat:d.lat, lng:d.lng, approx:d.approx, private:priv});
+    else if (d.country && featByName.has(d.country)) addCountry(d.country, true, priv);
+  }
+  return id;
+}
+
+/* ---------- render: places ---------- */
+function renderPlaces(){
+  const countries = all("country").sort((a,b) => a.name.localeCompare(b.name));
+  $("#cCount").textContent = countries.length;
+  $("#countryChips").innerHTML = countries.length ? countries.map(c => `<span class="chip"><i class="cdot" style="background:${esc(c.color || "var(--visited)")}"></i>${esc(c.name)}<button class="own-only" data-rmc="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">×</button></span>`).join("")
+    : `<div class="empty-note" style="width:100%">No countries yet. Tap one on the map or add it above.</div>`;
+  const cities = all("city").sort((a,b) => (a.country||"").localeCompare(b.country||"") || a.name.localeCompare(b.name));
+  $("#ciCount").textContent = cities.length;
+  $("#cityList").innerHTML = cities.length ? cities.map(c => `<div class="li"><span class="dot"></span><div class="grow"><div>${esc(c.name)}</div><div class="sub">${esc(c.country||"Unknown country")} · <span class="mono">${fmtLL(c.lat,c.lng)}</span>${c.approx ? " · approximate" : ""}</div></div><button class="btn ghost sm" data-zoomc="${esc(c.id)}">Show</button><button class="btn ghost sm own-only" data-rmp="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">×</button></div>`).join("")
+    : `<div class="empty-note">No cities yet. Add one above, drop a pin, or save a trip.</div>`;
+}
+$("#tab-places").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.rmc) { const n = docs.get(b.dataset.rmc)?.name; store.remove(b.dataset.rmc); toast(`Removed ${n}`); }
+  if (b.dataset.rmp) { store.remove(b.dataset.rmp); }
+  if (b.dataset.zoomc) { const c = docs.get(b.dataset.zoomc); if (c) svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(W/2,H/2).scale(Math.max(6, cityK())).translate(...projection([c.lng,c.lat]).map(v => -v))); }
+});
+$("#addCountryForm").addEventListener("submit", e => {
+  e.preventDefault(); const v = $("#addCountry").value; const n = matchCountry(v);
+  if (!n) { toast(`Couldn't find "${v}". Pick a name from the list.`); return; }
+  addCountry(n); $("#addCountry").value = ""; toast(`Added ${n}`);
+});
+/* place suggestions under any city box */
+let sug = {el:null, items:[], active:-1}, sgT;
+function countryInputFor(el){
+  return ({addCity:"#addCityCountry", pinName:"#pinCountry", "wz-city":"#wz-country"}[el.id] && $({addCity:"#addCityCountry", pinName:"#pinCountry", "wz-city":"#wz-country"}[el.id]))
+    || el.closest(".dayrow")?.querySelector('[data-k="country"]') || null;
+}
+function closeSuggest(){ $("#suggest").hidden = true; sug.el?.setAttribute("aria-expanded", "false"); sug = {el:null, items:[], active:-1}; }
+function placeSuggest(){
+  const ul = $("#suggest"), el = sug.el; if (!el || ul.hidden) return;
+  const r = el.getBoundingClientRect(), w = Math.min(Math.max(r.width, 260), innerWidth - 16);
+  ul.style.width = w + "px"; ul.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  const h = ul.offsetHeight, below = innerHeight - r.bottom;
+  ul.style.top = (below < h + 12 && r.top > below ? r.top - h - 4 : r.bottom + 4) + "px";
+}
+function renderSuggest(){
+  const ul = $("#suggest"), el = sug.el;
+  ul.innerHTML = sug.items.map((r, i) => `<li role="option" id="sg${i}" data-sg="${i}" aria-selected="${i === sug.active}"><span class="ic p"></span><span class="grow"><span class="nm">${esc(r.name)}</span><div class="sub">${esc(r.country)}${r.saved ? " · on your map" : r.fuzzy ? " · did you mean this?" : r.pop ? " · " + fmtPop(r.pop) : ""}</div></span></li>`).join("");
+  ul.hidden = false; el.setAttribute("aria-expanded", "true"); el.setAttribute("aria-activedescendant", sug.active >= 0 ? "sg" + sug.active : "");
+  placeSuggest();
+}
+function openSuggest(el){
+  const raw = el.value.trim(), cin = countryInputFor(el), hint = cin ? (matchCountry(cin.value) || "") : "";
+  let items = raw ? cityMatches(raw, {limit:6, country:hint}) : [];
+  if (!items.length && hint && raw) items = cityMatches(raw, {limit:6});
+  if (!items.length || document.activeElement !== el) { if (sug.el === el) closeSuggest(); return; }
+  sug = {el, items, active:-1};
+  renderSuggest();
+}
+function pickSuggest(r){
+  const el = sug.el; closeSuggest(); if (!el || !r) return;
+  const cin = countryInputFor(el);
+  el.value = r.name; if (cin && r.country) cin.value = r.country;
+  if (el.id === "wz-city" && wiz) {
+    Object.assign(wiz.next, {city:r.name, country:r.country || wiz.next.country, lat:r.lat, lng:r.lng, picked:r.name});
+    saveWiz(); render(); $("#wz-notes")?.focus();
+  } else if (el.dataset.k === "city" && editing) {
+    readForm(); const d = editing.days[+el.closest(".dayrow").dataset.i];
+    Object.assign(d, {lat:r.lat, lng:r.lng, approx:false});
+  } else if (el.id === "addCity") el.dataset.pick = JSON.stringify(r);
+}
+document.addEventListener("input", e => {
+  const el = e.target; if (el.dataset?.suggest !== "city") return;
+  loadCities(); clearTimeout(sgT); sgT = setTimeout(() => openSuggest(el), 80);
+  if (el.id === "wz-city" && wiz?.next.picked && el.value !== wiz.next.picked) { wiz.next.lat = null; wiz.next.lng = null; wiz.next.picked = ""; }   // typed a different place after picking one
+});
+document.addEventListener("focusin", e => {
+  const el = e.target;
+  if (el.dataset?.suggest === "city") { loadCities().then(() => { if (document.activeElement === el && el.value.trim()) openSuggest(el); }); }
+  else if (sug.el && el !== sug.el) closeSuggest();
+});
+document.addEventListener("focusout", e => { if (e.target === sug.el) setTimeout(() => { if (sug.el && document.activeElement !== sug.el) closeSuggest(); }, 150); });
+document.addEventListener("keydown", e => {
+  if (!sug.el || e.target !== sug.el || $("#suggest").hidden) return;
+  const n = sug.items.length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); sug.active = (sug.active + (e.key === "ArrowDown" ? 1 : -1) + n + 1) % (n + 1); if (sug.active === n) sug.active = -1; renderSuggest(); }
+  else if (e.key === "Enter" && sug.active >= 0) { e.preventDefault(); pickSuggest(sug.items[sug.active]); }
+  else if (e.key === "Escape") { e.preventDefault(); closeSuggest(); }
+  else if (e.key === "Tab" && sug.active >= 0) pickSuggest(sug.items[sug.active]);
+});
+$("#suggest").addEventListener("mousedown", e => { const li = e.target.closest("[data-sg]"); if (li) { e.preventDefault(); pickSuggest(sug.items[+li.dataset.sg]); } });
+window.addEventListener("resize", closeSuggest);
+document.addEventListener("scroll", placeSuggest, true);
+
+$("#addCityForm").addEventListener("submit", async e => {
+  e.preventDefault(); const city = $("#addCity").value.trim(); const ctry = $("#addCityCountry").value.trim();
+  if (!city) { $("#addCity").focus(); return; }
+  const pick = (() => { try { return JSON.parse($("#addCity").dataset.pick || "null"); } catch { return null; } })();
+  delete $("#addCity").dataset.pick;
+  if (pick && pick.name === city) { addCity({name:pick.name, country:matchCountry(ctry) || pick.country, lat:pick.lat, lng:pick.lng}); toast(`Added ${pick.name}`); $("#addCity").value = ""; $("#addCityCountry").value = ""; return; }
+  const btn = $("#addCityBtn"); btn.disabled = true; btn.textContent = "Finding…";
+  const [g] = await geocode([{city, country:ctry}]);
+  btn.disabled = false; btn.textContent = "Add";
+  let country = matchCountry(ctry) || matchCountry(g?.country);
+  if (g && num(g.lat)) { addCity({name:city, country, lat:+g.lat, lng:+g.lng}); toast(`Added ${city}`); }
+  else if (country) { const c = countryCentroid(country); addCity({name:city, country, lat:c[1], lng:c[0], approx:true}); toast(`Added ${city} at the middle of ${country}. Use Drop city pin for the exact spot.`); }
+  else { toast("Add the country too, or use Drop city pin on the map."); return; }
+  $("#addCity").value = ""; $("#addCityCountry").value = "";
+});
+
+/* ---------- photos (website version, signed in) ---------- */
+const urlCache = new Map();          // path -> {url, exp}
+let lb = null;                       // open photo viewer {tripId, idx, confirm}
+const photosEnabled = () => store.mode === "cloud";
+function photoHint(){
+  if (sb) return "Sign in to add photos to your trips.";
+  if (window.claude) return "Photos can be added on the website version of this app.";
+  return "Photos need the free backend set up. See SETUP.md.";
+}
+const orderedPhotos = t => (t?.photos || []).slice().sort((a, b) => ((a.day ?? 1e9) - (b.day ?? 1e9)) || (a.addedAt - b.addedAt));
+async function signUrls(paths){
+  if (!sb || store.mode !== "cloud") return;
+  const now = Date.now(), need = [...new Set(paths)].filter(p => !(urlCache.get(p)?.exp > now));
+  if (!need.length) return;
+  const { data } = await sb.storage.from(BUCKET).createSignedUrls(need, 3600);
+  (data || []).forEach(r => { if (r.signedUrl) urlCache.set(r.path, { url: r.signedUrl, exp: now + 3400e3 }); });
+}
+async function hydratePhotos(scope){
+  if (!sb || store.mode !== "cloud") return;
+  const imgs = [...scope.querySelectorAll("img[data-path]")].filter(i => !i.getAttribute("src"));
+  if (!imgs.length) return;
+  await signUrls(imgs.map(i => i.dataset.path));
+  imgs.forEach(i => { const u = urlCache.get(i.dataset.path)?.url; if (u) i.src = u; });
+}
+async function shrink(file, max = 1800){
+  let src;
+  try { src = await createImageBitmap(file); }
+  catch { src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); }); }
+  const w = src.width, h = src.height, sc = Math.min(1, max / Math.max(w, h));
+  const c = document.createElement("canvas"); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  // toDataURL is synchronous; toBlob can be postponed indefinitely while the tab is in the background
+  const bin = atob(c.toDataURL("image/jpeg", 0.82).split(",")[1]), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "image/jpeg" });
+}
+let uploadQueue = Promise.resolve();
+function uploadPhotos(tripId, files, day){   // one batch at a time, so batches can't overwrite each other
+  const list = [...files].slice(0, 30);
+  uploadQueue = uploadQueue.then(() => uploadBatch(tripId, list, day)).catch(() => {});
+  return uploadQueue;
+}
+async function uploadBatch(tripId, list, day){
+  if (!photosEnabled()) { toast(photoHint()); return; }
+  const added = [];
+  for (let i = 0; i < list.length; i++) {
+    toast(`Uploading photo ${i + 1} of ${list.length}…`);
+    try {
+      const blob = await shrink(list[i]); if (!blob) throw new Error("unreadable");
+      const path = `${cloudUser.id}/${tripId}/${uid()}.jpg`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg" });
+      if (error) throw error;
+      added.push({ path, day, caption: "", addedAt: Date.now() + i });
+    } catch (e) {
+      toast(/exceed|quota|limit/i.test(e?.message || "") ? "Your free photo storage is full." : `Couldn't add ${list[i].name}. It may be a format this browser can't open; try a JPEG.`);
+      await new Promise(r => setTimeout(r, 1800));
+    }
+  }
+  const t = docs.get(tripId); if (!t || !added.length) return;
+  await store.put(tripId, { ...t, photos: [...(t.photos || []), ...added] });
+  toast(`Added ${added.length} photo${added.length === 1 ? "" : "s"}`);
+}
+function updatePhoto(tripId, path, patch){
+  const t = docs.get(tripId); if (!t) return;
+  store.put(tripId, { ...t, photos: (t.photos || []).map(p => p.path === path ? { ...p, ...patch } : p) });
+}
+async function deletePhoto(tripId, path){
+  const t = docs.get(tripId); if (!t) return;
+  await sb.storage.from(BUCKET).remove([path]);
+  urlCache.delete(path);
+  await store.put(tripId, { ...t, photos: (t.photos || []).filter(p => p.path !== path), cover: t.cover === path ? "" : (t.cover || "") });
+  toast("Photo deleted");
+}
+function openLB(tripId, path){ const ps = orderedPhotos(shown().get(tripId)); lb = { tripId, idx: Math.max(0, ps.findIndex(p => p.path === path)), confirm: false }; renderLB(); }
+function renderLB(){
+  const box = $("#lightbox"), t = lb && shown().get(lb.tripId), ps = orderedPhotos(t);
+  if (!lb || !ps.length) { box.hidden = true; lb = null; return; }
+  lb.idx = Math.max(0, Math.min(lb.idx, ps.length - 1));
+  const p = ps[lb.idx], many = ps.length > 1;
+  box.innerHTML = `<div class="lb-top"><span class="mono">${lb.idx + 1} / ${ps.length}${p.day != null && t.days[p.day] ? " · " + esc(t.days[p.day].city || t.days[p.day].country) : ""}</span><button class="lb-x" data-lb="close" aria-label="Close photo">×</button></div>
+    <div class="lb-stage"><button class="lb-nav" data-lb="prev" aria-label="Previous photo"${many ? "" : " hidden"}>‹</button><img data-path="${esc(p.path)}" alt="${esc(p.caption || "Trip photo")}"><button class="lb-nav" data-lb="next" aria-label="Next photo"${many ? "" : " hidden"}>›</button></div>
+    ${viewing ? `<div class="lb-bar"><span class="lb-cap">${esc(p.caption || "")}</span></div>` : `<div class="lb-bar">
+      <input type="text" id="lbCaption" value="${esc(p.caption || "")}" placeholder="Add a caption" aria-label="Caption">
+      <select id="lbDay" aria-label="Which step"><option value="">Whole trip</option>${t.days.map((d, i) => `<option value="${i}"${p.day === i ? " selected" : ""}>Step ${i + 1} · ${esc(d.city || d.country || "")}</option>`).join("")}</select>
+      <button class="btn sm" data-lb="cover"${t.cover === p.path ? " disabled" : ""}>${t.cover === p.path ? "Cover photo" : "Make cover photo"}</button>
+      ${lb.confirm ? `<span class="confirm">Delete this photo? <button class="btn sm danger" data-lb="del">Delete</button><button class="btn sm" data-lb="keep">Keep</button></span>` : `<button class="btn sm danger" data-lb="askdel">Delete</button>`}
+    </div>`}`;
+  box.hidden = false; hydratePhotos(box);
+}
+$("#lightbox").addEventListener("click", e => {
+  const b = e.target.closest("[data-lb]"); if (!b || !lb) return;
+  const ps = orderedPhotos(shown().get(lb.tripId)), p = ps[lb.idx], a = b.dataset.lb;
+  if (a === "close") { lb = null; renderLB(); return; }
+  if (a === "prev" || a === "next") { lb.idx = (lb.idx + (a === "next" ? 1 : -1) + ps.length) % ps.length; lb.confirm = false; renderLB(); }
+  if (a === "askdel") { lb.confirm = true; renderLB(); }
+  if (a === "keep") { lb.confirm = false; renderLB(); }
+  if (a === "del") { lb.confirm = false; deletePhoto(lb.tripId, p.path).then(renderLB); }
+  if (a === "cover") { const t = docs.get(lb.tripId); store.put(lb.tripId, { ...t, cover: p.path }); renderLB(); toast("Cover photo set"); }
+});
+$("#lightbox").addEventListener("change", e => {
+  if (!lb || viewing) return; const p = orderedPhotos(docs.get(lb.tripId))[lb.idx];
+  if (e.target.id === "lbCaption") updatePhoto(lb.tripId, p.path, { caption: e.target.value.trim() });
+  if (e.target.id === "lbDay") { updatePhoto(lb.tripId, p.path, { day: e.target.value === "" ? null : +e.target.value }); lb.idx = orderedPhotos(docs.get(lb.tripId)).findIndex(x => x.path === p.path); renderLB(); }
+});
+document.addEventListener("keydown", e => {
+  if (!lb || e.target.matches("input, select, textarea")) return;
+  if (e.key === "Escape") { lb = null; renderLB(); }
+  if (e.key === "ArrowRight") $("#lightbox [data-lb=next]")?.click();
+  if (e.key === "ArrowLeft") $("#lightbox [data-lb=prev]")?.click();
+});
+
+/* ---------- render: trips folder ---------- */
+function renderTrips(){
+  const pane = $("#tab-trips");
+  const trips = tripsSorted();
+  $("#tripCount").textContent = trips.length;
+  if (wiz && !viewing) { renderWiz(pane); return; }
+  if (editing && !viewing) { if ($("#tripForm")) readForm(); renderTripForm(pane); return; }
+  if (openTrip && shown().get(openTrip)) { renderTripPage(pane, {id:openTrip, ...shown().get(openTrip)}); return; }
+  const head = viewing ? viewHead() : `<div class="folderhead"><svg width="22" height="19" viewBox="0 0 15 13" aria-hidden="true"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3l1.5 1.6h5.5A1.5 1.5 0 0 1 14 4.1v6.4a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 1 10.5z" fill="var(--chip)" stroke="var(--chip-ink)" stroke-width="1.2"/></svg><h2>My Trips</h2><button class="btn sm" data-act="new">+ Quick form</button><button class="btn primary sm" data-act="journal">Document a trip</button></div>`;
+  if (!trips.length && viewing) { pane.innerHTML = head + `<div class="empty-note">${esc(firstName(viewing.profile))} hasn't shared any trips with you yet.</div>`; return; }
+  if (!trips.length) { pane.innerHTML = head + `<div class="empty-note">Your trips folder is empty.<br><b>Document a trip</b> to add it step by step, in order, or text it to the AI in <b>AI chat</b>.</div>`; return; }
+  pane.innerHTML = head + trips.map(t => {
+    const coords = routeCoords(t), km = Math.round(routeKm(coords)), cs = tripCountries(t);
+    const cover = (t.photos || []).find(p => p.path === t.cover) || (t.photos || [])[0];
+    return `<article class="trip">
+      <button class="trip-h" data-open="${esc(t.id)}">
+        <span class="sw" style="background:${tripColor(t)}"></span>
+        <span class="grow"><strong>${esc(t.title)}</strong>
+          <span class="meta">${esc(fmtRange(t.start,t.end))} · ${t.days.length} step${t.days.length===1?"":"s"}${cs.length ? " · " + esc(cs.join(", ")) : ""}${km ? ` · <span class="mono">${km.toLocaleString()} km</span>` : ""}${(t.photos || []).length ? ` · ${(t.photos || []).length} photo${(t.photos || []).length === 1 ? "" : "s"}` : ""}${sb && !viewing ? " · " + visLabel(t.visibility) : ""}</span></span>
+        ${cover && photosEnabled() ? `<img class="tc-thumb" data-path="${esc(cover.path)}" alt="">` : `<span class="src">${t.source === "ai" ? "AI" : t.source === "journal" ? "Journal" : "Manual"}</span>`}
+      </button>
+    </article>`;
+  }).join("");
+  hydratePhotos(pane);
+}
+function modeSummary(t){
+  const km = new Map(), ds = t.days || [];
+  for (let i = 1; i < ds.length; i++) { const a = ds[i-1], b = ds[i]; if (b.transport && num(a.lat) && num(b.lat)) km.set(b.transport, (km.get(b.transport) || 0) + d3.geoDistance([+a.lng, +a.lat], [+b.lng, +b.lat]) * EARTH_KM); }
+  if (!km.size) return "";
+  return `<div class="tp-modes">${[...km].sort((x, y) => y[1] - x[1]).map(([m, k]) => `<span><span class="mode-pill">${modeLabel(m)}</span> <span class="mono">${Math.round(k).toLocaleString()} km</span></span>`).join("")}</div>`;
+}
+function dayNumber(t, d){ if (!t.start || !d.date) return null; const n = Math.round((new Date(d.date + "T12:00:00") - new Date(t.start + "T12:00:00")) / 864e5) + 1; return n >= 1 ? n : null; }
+function renderTripPage(pane, t){
+  const coords = routeCoords(t), km = Math.round(routeKm(coords)), cs = tripCountries(t), photos = t.photos || [];
+  const nDays = t.start && t.end ? Math.round((new Date(t.end + "T12:00:00") - new Date(t.start + "T12:00:00")) / 864e5) + 1 : t.days.length;
+  const cover = photos.find(p => p.path === t.cover) || photos[0];
+  const showImgs = photosEnabled(), canPhoto = showImgs && !viewing;
+  const thumb = p => `<button class="ph" data-ph="${esc(p.path)}" aria-label="Open photo${p.caption ? ": " + esc(p.caption) : ""}"><img data-path="${esc(p.path)}" alt="${esc(p.caption || "Trip photo")}" loading="lazy"></button>`;
+  const addBtn = (day, label) => canPhoto ? `<label class="btn ghost sm addph">${label}<input type="file" accept="image/*" multiple data-upload="${day}" hidden></label>` : "";
+  const loose = photos.filter(p => p.day == null || !t.days[p.day]);
+  pane.innerHTML = `<div class="tp" style="--trip:${tripColor(t)}">
+    <div class="tp-top"><button class="btn ghost sm" data-act="back">← ${viewing ? esc(firstName(viewing.profile)) + "'s trips" : "My Trips"}</button>${!viewing && sb
+      ? `<label class="vis">Who can see this <select data-vis="${esc(t.id)}">${visOptions(t.visibility)}</select></label>`
+      : `<span class="src">${t.source === "ai" ? "AI" : t.source === "journal" ? "Journal" : "Manual"}</span>`}</div>
+    <header class="tp-cover${cover && showImgs ? " has-img" : ""}">${cover && showImgs ? `<img data-path="${esc(cover.path)}" alt="">` : ""}
+      <div class="tp-cover-txt"><h2>${esc(t.title)}</h2><div>${esc(fmtRange(t.start, t.end))}${t.companions ? " · with " + esc(t.companions) : ""}</div></div></header>
+    <div class="tp-stats">
+      <div><b>${nDays}</b><span>Days</span></div><div><b>${km.toLocaleString()}</b><span>Km</span></div><div><b>${cs.length}</b><span>Countries</span></div>
+      <div><b>${t.days.length}</b><span>Steps</span></div><div><b>${photos.length}</b><span>Photos</span></div></div>
+    ${modeSummary(t)}
+    ${t.rating ? `<div class="hint">Rating <span class="mono">${"★".repeat(+t.rating)}${"☆".repeat(5 - +t.rating)}</span></div>` : ""}
+    ${t.notes ? `<p class="tp-notes">${esc(t.notes)}</p>` : ""}
+    <ol class="steps">${t.days.map((d, i) => {
+      const prev = t.days[i - 1];
+      const leg = prev && num(prev.lat) && num(d.lat) ? Math.round(d3.geoDistance([+prev.lng, +prev.lat], [+d.lng, +d.lat]) * EARTH_KM) : 0;
+      const ph = photos.filter(p => p.day === i), dn = dayNumber(t, d);
+      return `${leg || d.transport ? `<li class="leg">${d.transport ? `<span class="mode-pill">${modeLabel(d.transport)}</span> ` : ""}${leg ? leg.toLocaleString() + " km" : ""}</li>` : ""}<li class="step">
+        <button class="step-go" data-go="${i}"><span class="step-n">${i + 1}</span><span class="grow"><strong>${esc([d.city, d.country].filter(Boolean).join(", ") || "Somewhere")}</strong>
+          <span class="step-d">${dn ? "Day " + dn + " · " : ""}${esc(fmtDate(d.date))}${d.until && d.until !== d.date ? " – " + esc(fmtDate(d.until)) : ""}${d.approx ? " · approximate spot" : ""}</span></span></button>
+        <div class="step-body">
+          ${d.notes ? `<p class="step-story">${esc(d.notes)}</p>` : ""}
+          ${ph.length && showImgs ? `<div class="pgrid">${ph.map(thumb).join("")}</div>` : ""}
+          ${addBtn(i, "+ Add photos")}
+        </div></li>`;
+    }).join("")}</ol>
+    ${loose.length && showImgs ? `<div class="sec"><h3>More photos <span class="mono">${loose.length}</span></h3><div class="pgrid">${loose.map(thumb).join("")}</div></div>` : ""}
+    ${canPhoto ? addBtn("", "+ Add photos to the whole trip") : viewing ? "" : `<p class="hint">${esc(photoHint())}</p>`}
+    ${viewing ? "" : `<div class="trip-actions">
+      <button class="btn sm" data-edit="${esc(t.id)}">Edit trip</button>
+      ${confirmDel === t.id ? `<span class="confirm">Delete this trip${photos.length ? " and its " + photos.length + " photo" + (photos.length === 1 ? "" : "s") : ""}? <button class="btn sm danger" data-del="${esc(t.id)}">Delete</button><button class="btn ghost sm" data-nodel="1">Keep</button></span>`
+        : `<button class="btn ghost sm danger" data-askdel="${esc(t.id)}">Delete trip</button>`}
+    </div>`}</div>`;
+  hydratePhotos(pane);
+}
+function blankDay(prevDate){ let date = ""; if (prevDate) { const d = new Date(prevDate + "T12:00:00"); d.setDate(d.getDate()+1); date = d.toISOString().slice(0,10); } return {date, city:"", country:"", notes:""}; }
+function renderTripForm(pane){
+  const t = editing;
+  pane.innerHTML = `<div class="folderhead"><h2>${t.id ? "Edit trip" : "New trip"}</h2><button class="btn ghost sm" data-act="cancel">Cancel</button></div>
+  <form class="form" id="tripForm">
+    <label class="f">Trip name<input id="tf-title" type="text" value="${esc(t.title)}" placeholder="e.g. Portugal road trip" required></label>
+    ${sb ? `<label class="f">Who can see this trip<select id="tf-vis">${visOptions(t.visibility)}</select></label>` : ""}
+    <div class="row"><label class="f">Start<input id="tf-start" type="date" value="${esc(t.start)}"></label><label class="f">End<input id="tf-end" type="date" value="${esc(t.end)}"></label></div>
+    <div class="row"><label class="f">Who came along<input id="tf-comp" type="text" value="${esc(t.companions)}" placeholder="e.g. Sam and Priya"></label>
+      <label class="f" style="flex:0 1 110px">Rating<select id="tf-rating"><option value="">—</option>${[5,4,3,2,1].map(n => `<option value="${n}"${+t.rating===n?" selected":""}>${"★".repeat(n)}</option>`).join("")}</select></label></div>
+    <label class="f">Trip notes<textarea id="tf-notes" rows="3" placeholder="Highlights, tips, where you stayed">${esc(t.notes)}</textarea></label>
+    <div class="sec"><h3>Itinerary <span class="mono">${t.days.length} day${t.days.length===1?"":"s"}</span></h3>
+      <div style="display:grid;gap:8px">${t.days.map((d,i) => `<div class="dayrow" data-i="${i}">
+        <div class="dayrow-h">Day ${i+1}<button type="button" class="btn ghost sm" data-rmday="${i}" ${t.days.length<2?"disabled":""}>Remove</button></div>
+        <div class="row"><label class="f" style="flex:0 1 150px">Date<input type="date" data-k="date" value="${esc(d.date)}"></label>
+          <label class="f">City<input type="text" data-k="city" value="${esc(d.city)}" placeholder="City" autocomplete="off" data-suggest="city" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest"></label>
+          <label class="f">Country<input type="text" data-k="country" list="countryList" value="${esc(d.country)}" placeholder="Country"></label>
+          <label class="f" style="flex:0 1 120px">Got there by<select data-k="transport">${modeOptions(d.transport)}</select></label></div>
+        <label class="f">What you did<textarea data-k="notes" rows="2" placeholder="Sights, food, people">${esc(d.notes)}</textarea></label>
+      </div>`).join("")}</div>
+      <button type="button" class="btn sm" data-act="addday" style="margin-top:8px">+ Add day</button>
+    </div>
+    <div class="row"><button class="btn primary" type="submit" id="tf-save">Save to My Trips</button></div>
+  </form>`;
+}
+function readForm(){
+  const t = editing; if (!t) return;
+  t.title = $("#tf-title")?.value ?? t.title; t.start = $("#tf-start")?.value ?? t.start; t.end = $("#tf-end")?.value ?? t.end;
+  t.companions = $("#tf-comp")?.value ?? t.companions; t.rating = $("#tf-rating")?.value ?? t.rating; t.notes = $("#tf-notes")?.value ?? t.notes; t.visibility = $("#tf-vis")?.value ?? t.visibility;
+  document.querySelectorAll(".dayrow").forEach(row => { const d = t.days[+row.dataset.i]; row.querySelectorAll("[data-k]").forEach(inp => {
+    const nv = inp.value; if (d[inp.dataset.k] !== nv && (inp.dataset.k === "city" || inp.dataset.k === "country")) { d.lat = null; d.lng = null; d.approx = false; } d[inp.dataset.k] = nv; }); });
+}
+$("#tab-trips").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const a = b.dataset;
+  if (a.act === "journal") { startWiz(); return; }
+  if (wiz && handleWizClick(a)) return;
+  if (a.act === "new") { editing = {title:"", start:"", end:"", companions:"", rating:"", notes:"", visibility:"followers", days:[blankDay()]}; renderTrips(); $("#tf-title").focus(); }
+  else if (a.act === "cancel") { editing = null; renderTrips(); }
+  else if (a.act === "addday") { readForm(); const last = editing.days[editing.days.length-1]; editing.days.push({...blankDay(last?.date || editing.start), country:last?.country || ""}); renderTrips(); }
+  else if (a.rmday) { readForm(); const r = +a.rmday; editing.days.splice(r, 1);
+    if (editing.photos) editing.photos = editing.photos.map(p => p.day == null ? p : p.day === r ? {...p, day:null} : p.day > r ? {...p, day:p.day - 1} : p);   // keep photos on the right step
+    renderTrips(); }
+  else if (a.open) { openTrip = a.open; selectedTrip = a.open; confirmDel = null; found = null; render(); $("#tab-trips").scrollTop = 0; zoomTo(routeCoords(shown().get(a.open))); }
+  else if (a.act === "back") { openTrip = null; selectedTrip = null; confirmDel = null; found = null; render(); drawFound(); $("#zReset").click(); }
+  else if (a.ph) { openLB(openTrip, a.ph); }
+  else if (a.go) { const d = shown().get(openTrip)?.days[+a.go]; if (d && num(d.lat)) { found = {type:"city", quiet:true, name:d.city, country:d.country, lat:+d.lat, lng:+d.lng}; renderFound(); drawFound(); zoomToPoint([+d.lng, +d.lat]); } }
+  else if (a.show) { selectedTrip = selectedTrip === a.show ? null : a.show; render(); if (selectedTrip) zoomTo(routeCoords(shown().get(a.show))); else $("#zReset").click(); }
+  else if (a.edit) { const t = docs.get(a.edit); editing = JSON.parse(JSON.stringify({id:a.edit, ...t})); if (!editing.days.length) editing.days.push(blankDay()); renderTrips(); }
+  else if (a.askdel) { confirmDel = a.askdel; renderTrips(); }
+  else if (a.nodel) { confirmDel = null; renderTrips(); }
+  else if (a.del) { const t = docs.get(a.del), n = t?.title; if (selectedTrip === a.del) selectedTrip = null; if (openTrip === a.del) openTrip = null; confirmDel = null;
+    if (t?.photos?.length && store.mode === "cloud") sb.storage.from(BUCKET).remove(t.photos.map(p => p.path));
+    store.remove(a.del); toast(`Deleted ${n}. Its cities stay on your map.`); }
+});
+$("#tab-trips").addEventListener("change", e => {
+  const el = e.target;
+  if (el.dataset.vis) { const t = docs.get(el.dataset.vis); if (t) { store.put(el.dataset.vis, {...t, visibility:el.value}); if (el.value !== "private") sharePlacesOf(t); toast(`This trip is now visible to: ${visLabel(el.value)}`); } return; } if (el.dataset.upload === undefined || !openTrip || !el.files?.length) return;
+  uploadPhotos(openTrip, el.files, el.dataset.upload === "" ? null : +el.dataset.upload); el.value = "";
+});
+$("#tab-trips").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (e.target.id === "wizStop") { addStop(); return; }
+  if (e.target.id === "wizDetails") { saveJournal(); return; }
+  readForm();
+  editing.days = editing.days.filter(d => d.city || d.country || d.notes || d.date);
+  if (!editing.days.length) { toast("Add at least one day with a place."); editing.days.push(blankDay()); renderTrips(); return; }
+  const btn = $("#tf-save"); btn.disabled = true; btn.textContent = "Saving…";
+  const id = await saveTrip(editing, "manual");
+  toast(`Saved "${editing.title || "Untitled trip"}" to My Trips`);
+  editing = null; openTrip = id; selectedTrip = null; render(); zoomTo(routeCoords(docs.get(id) || {days:[]}));
+});
+
+/* ---------- document a trip, stop by stop ---------- */
+const WIZ_KEY = LS_KEY + ".journal";
+const blankStop = (date, country, transport) => ({date:date || "", until:"", city:"", country:country || "", notes:"", transport:transport || "", lat:null, lng:null});
+function saveWiz(){ try { if (wiz) localStorage.setItem(WIZ_KEY, JSON.stringify({...wiz, busy:false})); else localStorage.removeItem(WIZ_KEY); } catch {} }
+function addDays(s, n){ if (!s) return ""; const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0,10); }
+function lastDate(){ const l = wiz.stops[wiz.stops.length - 1]; return l ? (l.until || l.date) : ""; }
+function suggestTitle(){
+  const cs = tripCountries({days:wiz.stops}).map(c => c === "United States of America" ? "USA" : c);
+  const first = wiz.stops[0]?.date; const when = first ? new Date(first + "T12:00:00").toLocaleDateString(undefined, {month:"long", year:"numeric"}) : "";
+  const where = cs.length > 3 ? cs.slice(0,3).join(", ") + " & more" : cs.join(" & ");
+  return [where || "My trip", when].filter(Boolean).join(", ");
+}
+function startWiz(){
+  wiz = {phase:"stops", stops:[], next:blankStop(), title:"", companions:"", rating:"", notes:"", visibility:"followers", err:"", busy:false, confirmCancel:false};
+  editing = null; saveWiz(); showTab("trips"); render(); $("#wz-date")?.focus();
+}
+function setWizSpot(ll, city, country){
+  const n = wiz.next; n.lng = ll[0]; n.lat = ll[1];
+  if (city) n.city = city;
+  n.country = country || countryAt(ll) || n.country;
+  setMode("country"); saveWiz(); render();
+  toast(city ? `Step set to ${city}` : `Spot set${n.country ? " in " + n.country : ""}. Add the place name.`);
+  (city ? $("#wz-notes") : $("#wz-city"))?.focus();
+}
+function validateNext(){
+  const n = wiz.next, prev = lastDate();
+  if (!n.date) return "Add the date you arrived.";
+  if (!n.city.trim() && !n.country.trim() && !num(n.lat)) return "Add a city or country, or pick the spot on the map.";
+  if (prev && n.date < prev) return `Steps go in date order. This date is before step ${wiz.stops.length} (${fmtDate(prev)}).`;
+  if (n.until && n.until < n.date) return "The leaving date is before the arrival date.";
+  return "";
+}
+async function addStop(){
+  wiz.err = validateNext(); if (wiz.err) { renderTrips(); return false; }
+  const n = wiz.next;
+  wiz.busy = true; renderTrips();
+  const stop = {transport:n.transport || "", date:n.date, until:n.until, city:n.city.trim(), country:matchCountry(n.country) || n.country.trim(), notes:n.notes.trim(), lat:n.lat, lng:n.lng};
+  if (num(stop.lat)) stop.country = stop.country || countryAt([stop.lng, stop.lat]) || "";
+  else await resolveDays([stop]);
+  if (!wiz) return false;
+  wiz.busy = false; wiz.confirmCancel = false;
+  wiz.stops.push(stop);
+  wiz.next = blankStop(stop.until || addDays(stop.date, 1), stop.country, stop.transport);
+  saveWiz(); render();
+  zoomTo(routeCoords({days:wiz.stops}));
+  toast(`Added step ${wiz.stops.length}: ${stop.city || stop.country}`);
+  $("#wz-city")?.focus();
+  return true;
+}
+async function saveJournal(){
+  const btn = $("#wz-save"); if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  const title = wiz.title.trim() || suggestTitle();
+  const t = {title, start:wiz.stops[0]?.date || "", end:wiz.stops.map(s => s.until || s.date).filter(Boolean).sort().pop() || "",
+    companions:wiz.companions, rating:wiz.rating, notes:wiz.notes, visibility:wiz.visibility || "followers", days:wiz.stops};
+  const id = await saveTrip(t, "journal");
+  wiz = null; saveWiz(); openTrip = id; selectedTrip = null; render();
+  toast(`Saved "${title}" to My Trips`); zoomTo(routeCoords(docs.get(id) || {days:[]}));
+}
+function handleWizClick(a){
+  if (a.act === "wizcancel") {
+    if (wiz.stops.length && !wiz.confirmCancel) { wiz.confirmCancel = true; renderTrips(); return true; }
+    wiz = null; saveWiz(); if (mode === "wizpick") setMode("country"); render(); return true;
+  }
+  if (a.act === "wizkeep") { wiz.confirmCancel = false; renderTrips(); return true; }
+  if (a.act === "wizpick") { setMode(mode === "wizpick" ? "country" : "wizpick"); renderTrips(); return true; }
+  if (a.act === "wizclearspot") { wiz.next.lat = null; wiz.next.lng = null; saveWiz(); render(); return true; }
+  if (a.rmstop) { wiz.stops.splice(+a.rmstop, 1); saveWiz(); render(); return true; }
+  if (a.act === "wizdone") {
+    const n = wiz.next;
+    const pending = n.city.trim() || num(n.lat);
+    (pending ? addStop() : Promise.resolve(true)).then(ok => { if (!ok || !wiz || !wiz.stops.length) return; wiz.phase = "details"; wiz.err = ""; if (mode === "wizpick") setMode("country"); saveWiz(); render(); $("#wz-title")?.select(); });
+    return true;
+  }
+  if (a.act === "wizback") { wiz.phase = "stops"; saveWiz(); render(); return true; }
+  return false;
+}
+$("#tab-trips").addEventListener("input", e => {
+  const el = e.target; if (!wiz || !el.dataset.w) return;
+  (el.closest("#wizDetails") ? wiz : wiz.next)[el.dataset.w] = el.value;
+  if (el.closest("#wizStop") && (el.dataset.w === "date" || el.dataset.w === "until") && wiz.err) { wiz.err = ""; const er = $("#wizErr"); if (er) er.hidden = true; }
+  saveWiz();
+});
+function renderWiz(pane){
+  const w = wiz, n = w.next, N = w.stops.length + 1;
+  const head = `<div class="folderhead"><h2>Document a trip</h2>${w.confirmCancel
+    ? `<span class="confirm">Discard ${w.stops.length} step${w.stops.length===1?"":"s"}? <button class="btn sm danger" data-act="wizcancel">Discard</button><button class="btn ghost sm" data-act="wizkeep">Keep going</button></span>`
+    : `<button class="btn ghost sm" data-act="wizcancel">Cancel</button>`}</div>
+    <div class="wizsteps"><span class="${w.phase==="stops"?"on":""}">1 · Steps in order</span><span class="${w.phase==="details"?"on":""}">2 · Name and save</span></div>`;
+  const list = w.stops.length ? `<ol class="wiz-list">${w.stops.map((s,i) => `<li><span class="wiz-n">${i+1}</span>
+    <div style="min-width:0"><div class="pl">${esc([s.city, s.country].filter(Boolean).join(", "))}${s.approx ? ` <span class="hint">(approx.)</span>` : ""}</div>
+    <div class="sub mono">${s.transport ? modeLabel(s.transport) + " · " : ""}${esc(fmtDate(s.date))}${s.until && s.until !== s.date ? " – " + esc(fmtDate(s.until)) : ""}</div>${s.notes ? `<div class="nt">${esc(s.notes)}</div>` : ""}</div>
+    ${w.phase === "stops" ? `<button type="button" class="btn ghost sm" data-rmstop="${i}" aria-label="Remove step ${i+1}">×</button>` : "<span></span>"}</li>`).join("")}</ol>` : "";
+  if (w.phase === "stops") {
+    pane.innerHTML = head + (w.stops.length ? "" : `<p class="hint">Add each place you went, one at a time, in the order you visited. Start with where the trip began. Your progress is kept on this device until you save.</p>`) + list + `
+    <form class="wizcard" id="wizStop" novalidate>
+      <div class="wizcard-h"><span class="wiz-n">${N}</span>Step ${N}</div>
+      <div class="row"><label class="f">Arrived<input type="date" data-w="date" id="wz-date" value="${esc(n.date)}"${w.stops.length ? ` min="${esc(lastDate())}"` : ""}></label>
+        <label class="f">Left (optional)<input type="date" data-w="until" id="wz-until" value="${esc(n.until)}"></label></div>
+      <div class="row"><label class="f">City or place<input type="text" data-w="city" id="wz-city" value="${esc(n.city)}" placeholder="e.g. Porto" autocomplete="off" data-suggest="city" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest"></label>
+        <label class="f">Country<input type="text" data-w="country" id="wz-country" list="countryList" value="${esc(n.country)}" placeholder="Country" autocomplete="off"></label></div>
+      <label class="f">${N === 1 ? "How did you get there?" : "How did you get here?"}<select data-w="transport" id="wz-mode">${modeOptions(n.transport)}</select></label>
+      <label class="f">What you did (optional)<textarea data-w="notes" id="wz-notes" rows="2" placeholder="Sights, food, where you stayed">${esc(n.notes)}</textarea></label>
+      <div class="row" style="align-items:center"><button type="button" class="btn sm" data-act="wizpick" aria-pressed="${mode==="wizpick"}">${mode === "wizpick" ? "Tap the map… (cancel)" : "Pick spot on map"}</button>
+        ${num(n.lat) ? `<span class="hint mono">${fmtLL(n.lat, n.lng)}</span><button type="button" class="btn ghost sm" data-act="wizclearspot">Clear</button>` : `<span class="hint">or we'll find it from the name</span>`}</div>
+      <div class="err" id="wizErr" role="alert"${w.err ? "" : " hidden"}>${esc(w.err)}</div>
+      <div class="row"><button class="btn primary" type="submit"${w.busy ? " disabled" : ""}>${w.busy ? "Finding the spot…" : `Add step ${N}`}</button></div>
+    </form>
+    <div class="row wizfoot"><span class="hint">${w.stops.length ? `${w.stops.length} step${w.stops.length===1?"":"s"} · ${esc(fmtRange(w.stops[0].date, lastDate()))}` : "No steps yet"}</span>
+      <button type="button" class="btn primary" data-act="wizdone"${w.stops.length || n.city.trim() ? "" : " disabled"}>Finish trip →</button></div>`;
+  } else {
+    pane.innerHTML = head + list + `
+    <form class="form" id="wizDetails">
+      <label class="f">Trip name<input type="text" data-w="title" id="wz-title" value="${esc(w.title || suggestTitle())}"></label>
+      ${sb ? `<label class="f">Who can see this trip<select data-w="visibility" id="wz-vis">${visOptions(w.visibility)}</select></label>` : ""}
+      <div class="row"><label class="f">Who came along<input type="text" data-w="companions" id="wz-comp" value="${esc(w.companions)}" placeholder="e.g. Sam and Priya"></label>
+        <label class="f" style="flex:0 1 110px">Rating<select data-w="rating" id="wz-rating"><option value="">—</option>${[5,4,3,2,1].map(r => `<option value="${r}"${+w.rating===r ? " selected" : ""}>${"★".repeat(r)}</option>`).join("")}</select></label></div>
+      <label class="f">Trip notes<textarea data-w="notes" id="wz-tnotes" rows="3" placeholder="Highlights, tips, anything to remember">${esc(w.notes)}</textarea></label>
+      <div class="row"><button type="button" class="btn" data-act="wizback">← Back to steps</button><button class="btn primary" type="submit" id="wz-save">Save to My Trips</button></div>
+    </form>`;
+    if (!w.title) w.title = suggestTitle();
+  }
+}
+
+/* ---------- AI trip chat ---------- */
+const EXAMPLES = [
+  "Day 1 – flew into Tokyo, stayed in Shinjuku, ramen at Fuunji. Day 2 – bullet train to Kyoto, Fushimi Inari at sunrise.",
+  "Spent March 3–6 in Lisbon, then a day trip to Sintra, then 3 nights in Porto.",
+  "Weekend in Edinburgh with Sam, hiked Arthur's Seat on Saturday."
+];
+function renderChat(){
+  const log = $("#chatlog");
+  if (sample === false) {
+    log.innerHTML = `<div class="noai">The AI isn't available in this view. You can still add trips with <b>+ New trip</b> in My Trips.</div>`;
+    $("#composer").hidden = true; $("#draftBox").innerHTML = ""; return;
+  }
+  $("#composer").hidden = false;
+  const intro = `<div class="msg ai">Tell me about a trip, one day at a time or all at once. I'll build the itinerary, plot it on the map, and you can save it to My Trips.</div>`;
+  const ex = chat.length ? "" : `<div class="examples">${EXAMPLES.map((x,i) => `<button data-ex="${i}">“${esc(x)}”</button>`).join("")}</div>`;
+  log.innerHTML = intro + ex + chat.map(m => `<div class="msg ${m.role === "user" ? "me" : "ai"}${m.typing ? " typing" : ""}">${esc(m.content)}</div>`).join("");
+  log.scrollTop = log.scrollHeight;
+  const db = $("#draftBox");
+  if (draft && draft.days?.length) {
+    const cs = tripCountries(draft);
+    db.innerHTML = `<div class="draft"><div class="draft-h"><strong>${esc(draft.title || "New trip")}</strong><span class="src">Draft</span></div>
+      <div class="stops">${esc(fmtRange(draft.start, draft.end))} · ${draft.days.length} day${draft.days.length===1?"":"s"}${cs.length ? " · " + esc(cs.join(", ")) : ""}</div>
+      <div class="stops">${draft.days.map((d,i) => `${i+1}. ${esc(d.city || d.country || "?")}`).join(" → ")}</div>
+      <div class="row"><button class="btn primary sm" data-draft="save">Save to My Trips</button><button class="btn sm" data-draft="edit">Edit details</button><button class="btn ghost sm" data-draft="discard">Start over</button></div></div>`;
+  } else db.innerHTML = "";
+}
+function normalizeDraft(t){
+  if (!t || typeof t !== "object") return null;
+  const days = Array.isArray(t.days) ? t.days.map(d => { const ok = num(d.lat) && num(d.lng) && !(+d.lat === 0 && +d.lng === 0);
+    return {date:d.date || "", city:d.city || "", country:matchCountry(d.country) || d.country || "", notes:d.notes || d.summary || "", transport:normMode(d.transport), lat: ok ? +d.lat : null, lng: ok ? +d.lng : null}; }) : [];
+  return {title:t.title || "", start:t.startDate || t.start || "", end:t.endDate || t.end || "", companions:t.companions || "", notes:t.notes || "", rating:"", days};
+}
+let busy = false;
+async function sendChat(text){
+  if (busy || !text.trim()) return;
+  const s = await getSample();
+  if (!s) { sample = false; renderChat(); return; }
+  busy = true; $("#sendBtn").disabled = true;
+  chat.push({role:"user", content:text.trim()});
+  chat.push({role:"assistant", content:"Plotting your trip…", typing:true});
+  renderChat();
+  const history = chat.filter(m => !m.typing).map(m => `${m.role === "user" ? "Traveler" : "You"}: ${m.content}`).join("\n");
+  const prompt = `You are a friendly travel journal assistant inside a travel map app. The traveler texts you about a trip they took, day by day or all at once. Keep an updated itinerary.
+Today's date is ${TODAY}. If they give dates without a year, assume the most recent past occurrence. If they say "Day 1, Day 2" without dates, leave dates empty unless a start date is known, then count forward.
+Every "country" value must be written exactly as one of these names: ${countryNames.join(" | ")}.
+Give each day the main city or place they were in, with accurate lat/lng for that place. Put what they did in that day's notes, in their words, tidied up. One entry per day; if they stayed several days in one place, repeat the place on each day.
+
+Current itinerary (JSON, may be empty):
+${JSON.stringify(draft ? {title:draft.title, startDate:draft.start, endDate:draft.end, companions:draft.companions, notes:draft.notes, days:draft.days} : null)}
+
+Conversation so far:
+${history}
+
+Reply with only this JSON:
+{"reply":"1-3 short friendly sentences: confirm what you added and ask about anything missing (like dates or the next day)","trip":{"title":"short trip name","startDate":"YYYY-MM-DD or empty","endDate":"YYYY-MM-DD or empty","companions":"","notes":"one-line trip summary","days":[{"date":"YYYY-MM-DD or empty","city":"","country":"","lat":38.72,"lng":-9.14,"notes":"","transport":""}]}}
+For each day, set "transport" to how they got to that place: plane, train, car, bus, boat, bike or walk. Leave it empty if they didn't say.
+Return the whole updated itinerary in "trip", keeping earlier days unless the traveler changed them.`;
+  try {
+    const r = await s.json(prompt, {cache:false});
+    chat.pop();
+    chat.push({role:"assistant", content: r?.reply || "Got it. I've updated your trip."});
+    const nd = normalizeDraft(r?.trip);
+    if (nd && nd.days.length) { draft = nd; render(); zoomTo(routeCoords(draft)); }
+  } catch(e) {
+    chat.pop(); chat.push({role:"assistant", content: aiErr(e)});
+  }
+  busy = false; $("#sendBtn").disabled = false;
+  renderChat();
+}
+$("#composer").addEventListener("submit", e => { e.preventDefault(); const v = $("#chatInput").value; $("#chatInput").value = ""; sendChat(v); });
+$("#chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); } });
+$("#tab-chat").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.ex) { $("#chatInput").value = EXAMPLES[+b.dataset.ex]; $("#chatInput").focus(); }
+  if (b.dataset.draft === "discard") { draft = null; chat = []; render(); }
+  if (b.dataset.draft === "edit") { editing = JSON.parse(JSON.stringify(draft)); editing.fromAI = true; draft = null; chat = []; showTab("trips"); render(); }
+  if (b.dataset.draft === "save") {
+    b.disabled = true; b.textContent = "Saving…";
+    const id = await saveTrip(draft, "ai"); const title = draft.title || "Untitled trip";
+    draft = null; chat = []; openTrip = id; showTab("trips"); render(); toast(`Saved "${title}" to My Trips`);
+  }
+});
+
+/* ---------- friends: profiles, follow requests, feed (website version, signed in) ---------- */
+const VIS = [["private", "Only me"], ["followers", "Followers"], ["public", "Everyone"]];
+const visLabel = v => (VIS.find(x => x[0] === (v || "followers")) || VIS[1])[1];
+const visOptions = v => VIS.map(([k, l]) => `<option value="${k}"${(v || "followers") === k ? " selected" : ""}>${l}</option>`).join("");
+const visOf = d => d?.kind === "trip" ? (d.visibility || "followers") : d?.private ? "private" : "followers";   // places are shared with followers unless only private trips added them
+const freshSocial = () => ({loaded:false, follows:[], profiles:new Map(), feed:[], results:[], q:"", msg:""});
+let me = null, social = freshSocial(), frT;
+const myId = () => cloudUser?.id;
+const firstName = p => (p?.display_name || p?.username || "Someone").trim().split(/\s+/)[0];
+function avColor(id){ let h = 0; for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ROUTE_COLORS[h % ROUTE_COLORS.length]; }
+function avatar(p, size = 36){
+  const st = `width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px`;
+  const url = p?.avatar_path && sb ? sb.storage.from("avatars").getPublicUrl(p.avatar_path).data.publicUrl : "";
+  if (url) return `<img class="av" src="${esc(url)}" alt="" style="${st}">`;
+  const ini = (p?.display_name || p?.username || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+  return `<span class="av" style="${st};background:${avColor(p?.id)}" aria-hidden="true">${esc(ini)}</span>`;
+}
+const relOut = id => social.follows.find(f => f.follower === myId() && f.followee === id);
+const pick = (test, side) => social.follows.filter(test).map(f => f[side]);
+const followingIds = () => pick(f => f.follower === myId() && f.status === "accepted", "followee");
+const followerIds = () => pick(f => f.followee === myId() && f.status === "accepted", "follower");
+const requestIds = () => pick(f => f.followee === myId() && f.status === "pending", "follower");
+async function loadSocial(){
+  if (store.mode !== "cloud") return;
+  const uid = myId();
+  const [p, fl] = await Promise.all([sb.from("profiles").select("*").eq("id", uid).maybeSingle(), sb.from("follows").select("*").or(`follower.eq.${uid},followee.eq.${uid}`)]);
+  if (fl.error) { toast("Couldn't load your friends. Check your connection."); return; }
+  me = p.data || null; social.follows = fl.data || [];
+  if (me) social.profiles.set(me.id, me);
+  const missing = [...new Set(social.follows.flatMap(f => [f.follower, f.followee]))].filter(x => x !== uid && !social.profiles.has(x));
+  if (missing.length) { const { data } = await sb.from("profiles").select("*").in("id", missing); (data || []).forEach(x => social.profiles.set(x.id, x)); }
+  const fids = followingIds();
+  social.feed = [];
+  if (fids.length) {
+    const { data } = await sb.from("docs").select("user_id,id,data,updated_at").eq("kind", "trip").in("user_id", fids).order("updated_at", {ascending:false}).limit(30);
+    social.feed = data || [];
+  }
+  social.loaded = true;
+  updateFriendBadge(); renderViewbar();
+  if (!$("#tab-friends").hidden) renderFriends();
+}
+function updateFriendBadge(){ const n = store.mode === "cloud" ? requestIds().length : 0, b = $("#reqCount"); b.textContent = n; b.hidden = !n; }
+function relButton(id){
+  const r = relOut(id);
+  if (!r) return `<button class="btn primary sm" data-follow="${esc(id)}">Follow</button>`;
+  if (r.status === "pending") return `<button class="btn sm" data-unfollow="${esc(id)}" title="Cancel your request">Requested</button>`;
+  return `<button class="btn sm" data-unfollow="${esc(id)}" title="Unfollow">Following</button>`;
+}
+const personRow = (p, action) => `<div class="li person"><button class="pbtn" data-profile="${esc(p.id)}">${avatar(p, 36)}<span class="grow" style="min-width:0"><b>${esc(p.display_name || p.username)}</b><span class="sub">@${esc(p.username)}</span></span></button>${action}</div>`;
+function timeAgo(iso){
+  const sec = (Date.now() - new Date(iso)) / 1000;
+  if (sec < 90) return "just now";
+  if (sec < 3600) return Math.round(sec / 60) + " min ago";
+  if (sec < 86400) return Math.round(sec / 3600) + " h ago";
+  if (sec < 86400 * 30) return Math.round(sec / 86400) + " d ago";
+  return fmtDate(String(iso).slice(0, 10));
+}
+function feedHTML(){
+  if (!followingIds().length) return `<div class="empty-note">When people approve your follow request, their newest trips and photos show up here.</div>`;
+  if (!social.feed.length) return `<div class="empty-note">No shared trips yet from people you follow.</div>`;
+  return `<div class="feed">${social.feed.map(r => {
+    const t = r.data || {}, p = social.profiles.get(r.user_id) || {id:r.user_id, username:"someone"}, photos = t.photos || [];
+    const cover = photos.find(x => x.path === t.cover) || photos[0], cs = tripCountries(t), n = (t.days || []).length;
+    return `<article class="feed-item"><button class="feed-who" data-profile="${esc(r.user_id)}">${avatar(p, 30)}<span><b>${esc(p.display_name || p.username)}</b> <span class="sub">· ${esc(timeAgo(r.updated_at))}</span></span></button>
+      <button class="feed-trip" data-fopen="${esc(r.user_id)}|${esc(r.id)}">${cover ? `<img class="feed-cover" data-path="${esc(cover.path)}" alt="">` : ""}
+        <span class="feed-body"><strong>${esc(t.title || "A trip")}</strong><span class="sub">${esc(fmtRange(t.start, t.end))} · ${n} step${n === 1 ? "" : "s"}${cs.length ? " · " + esc(cs.join(", ")) : ""}${photos.length ? ` · ${photos.length} photo${photos.length === 1 ? "" : "s"}` : ""}</span></span></button></article>`;
+  }).join("")}</div>`;
+}
+function renderPeople(){
+  const box = $("#frResults"); if (!box) return;
+  box.innerHTML = social.q.trim().length < 2 ? "" : social.results.length ? social.results.map(p => personRow(p, relButton(p.id))).join("") : `<p class="hint">No one found for "${esc(social.q)}".</p>`;
+}
+function renderFriends(){
+  const pane = $("#tab-friends"); if (!sb) return;
+  if (store.mode !== "cloud") { pane.innerHTML = `<div class="empty-note">Sign in to follow friends, approve who follows you, and see their trips and photos.<br><button class="btn primary sm" data-fr="signin" style="margin-top:10px">Sign in</button></div>`; return; }
+  if (!social.loaded) { pane.innerHTML = `<p class="hint">Loading friends…</p>`; return; }
+  if (!me) {
+    pane.innerHTML = `<form id="frProfile" class="form" novalidate>
+      <div class="folderhead"><h2>Make your profile</h2></div>
+      <p class="hint">Friends find you by your username. Only people you approve can see the trips you share with followers.</p>
+      <label class="f">Username<input id="frUser" type="text" placeholder="e.g. sam_travels" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <label class="f">Your name<input id="frName" type="text" placeholder="e.g. Sam Rivera" maxlength="40" autocomplete="name"></label>
+      ${social.msg ? `<div class="err" role="alert">${esc(social.msg)}</div>` : ""}
+      <div class="row"><button class="btn primary" type="submit">Create profile</button></div></form>`;
+    return;
+  }
+  const prof = ids => ids.map(id => social.profiles.get(id)).filter(Boolean);
+  const reqs = prof(requestIds()), following = prof(followingIds()), followers = prof(followerIds());
+  pane.innerHTML = `<div class="me-card">${avatar(me, 56)}<div class="grow" style="min-width:0"><h2>${esc(me.display_name || me.username)}</h2><div class="sub">@${esc(me.username)}</div>
+      <div class="counts">${followers.length} follower${followers.length === 1 ? "" : "s"} · ${following.length} following</div></div>
+      <label class="btn ghost sm" style="cursor:pointer">${me.avatar_path ? "Change photo" : "Add photo"}<input type="file" accept="image/*" data-avatar hidden></label></div>
+    ${reqs.length ? `<div class="sec"><h3>Follow requests <span class="mono">${reqs.length}</span></h3><div class="list">${reqs.map(p => personRow(p, `<span class="row" style="flex-wrap:nowrap"><button class="btn primary sm" data-approve="${esc(p.id)}">Approve</button><button class="btn ghost sm" data-decline="${esc(p.id)}">Decline</button></span>`)).join("")}</div></div>` : ""}
+    <div class="sec"><h3>Find friends</h3>
+      <form id="frSearch" class="row"><input id="frQ" type="search" placeholder="Name or @username" autocomplete="off" value="${esc(social.q)}" style="flex:1 1 180px"><button class="btn sm" type="submit">Search</button></form>
+      <div class="list" id="frResults"></div></div>
+    <div class="sec"><h3>From people you follow</h3>${feedHTML()}</div>
+    <details class="sec"><summary>Following (${following.length})</summary><div class="list">${following.map(p => personRow(p, relButton(p.id))).join("") || `<p class="hint">Nobody yet.</p>`}</div></details>
+    <details class="sec"><summary>Followers (${followers.length})</summary><div class="list">${followers.map(p => personRow(p, `<button class="btn ghost sm" data-rmfollower="${esc(p.id)}">Remove</button>`)).join("") || `<p class="hint">Nobody yet.</p>`}</div></details>`;
+  renderPeople(); hydratePhotos(pane);
+}
+async function searchPeople(q){
+  social.q = q;
+  const clean = q.replace(/^@/, "").replace(/[^\w .-]/g, "").trim();
+  if (clean.length < 2) { social.results = []; renderPeople(); return; }
+  const { data, error } = await sb.from("profiles").select("*").or(`username.ilike.${clean}%,display_name.ilike.%${clean}%`).limit(10);
+  social.results = error ? [] : (data || []).filter(p => p.id !== myId());
+  social.results.forEach(p => social.profiles.set(p.id, p));
+  renderPeople();
+}
+async function socialAct(run, okMsg){
+  const { error } = await run();
+  if (error) { toast("That didn't work. Try again."); return; }
+  if (okMsg) toast(okMsg);
+  await loadSocial(); renderPeople();
+  if (viewing) viewProfile(viewing.profile.id, openTrip);   // what you can see may have changed
+}
+async function setAvatar(file){
+  try {
+    const blob = await shrink(file, 400), path = `${myId()}/${uid()}.jpg`;
+    const up = await sb.storage.from("avatars").upload(path, blob, {contentType:"image/jpeg"}); if (up.error) throw up.error;
+    const old = me.avatar_path;
+    const { error } = await sb.from("profiles").update({avatar_path:path}).eq("id", myId()); if (error) throw error;
+    if (old) sb.storage.from("avatars").remove([old]);
+    toast("Profile photo updated"); loadSocial();
+  } catch { toast("Couldn't update your photo. Try a JPEG."); }
+}
+async function viewProfile(uid, tripId){
+  if (uid === myId()) { exitView(); showTab("trips"); return; }
+  let p = social.profiles.get(uid);
+  if (!p) { const r = await sb.from("profiles").select("*").eq("id", uid).maybeSingle(); p = r.data; if (p) social.profiles.set(uid, p); }
+  const { data, error } = await sb.from("docs").select("id,data").eq("user_id", uid);
+  if (error) { toast("Couldn't open that map. Try again."); return; }
+  viewing = { profile: p || {id:uid, username:"someone"}, docs: new Map((data || []).map(r => [r.id, r.data])) };
+  document.body.classList.add("viewing"); setMode("country");
+  openTrip = tripId && viewing.docs.has(tripId) ? tripId : null; selectedTrip = openTrip; confirmDel = null; found = null; lb = null; renderLB();
+  showTab("trips"); render(); renderViewbar(); drawFound(); $("#tab-trips").scrollTop = 0;
+  if (openTrip) zoomTo(routeCoords(viewing.docs.get(openTrip))); else $("#zReset").click();
+}
+function exitView(){
+  if (!viewing) return;
+  viewing = null; document.body.classList.remove("viewing");
+  openTrip = null; selectedTrip = null; found = null;
+  renderViewbar(); render(); drawFound(); $("#zReset").click();
+}
+function viewHead(){
+  const p = viewing.profile, r = relOut(p.id);
+  return `<div class="folderhead">${avatar(p, 30)}<h2>${esc(firstName(p))}'s trips</h2></div>
+    ${r?.status === "accepted" ? "" : `<div class="empty-note">You're seeing what ${esc(firstName(p))} shares with everyone. ${r ? "Once they approve your request" : "Follow them, and once they approve"}, you'll also see trips they share with followers.</div>`}`;
+}
+function renderViewbar(){
+  const vb = $("#viewbar");
+  if (!viewing) { vb.hidden = true; vb.innerHTML = ""; return; }
+  const p = viewing.profile;
+  vb.innerHTML = `${avatar(p, 26)}<span>Viewing <b>${esc(p.display_name || p.username)}</b>'s map</span>${me ? relButton(p.id) : ""}<button class="btn sm" data-vb="back">Back to my map</button>`;
+  vb.hidden = false;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-follow],[data-unfollow],[data-approve],[data-decline],[data-rmfollower],[data-profile],[data-fopen],[data-fr],[data-vb]");
+  if (!b || !sb) return;
+  const d = b.dataset;
+  if (d.fr === "signin") { const box = $("#account"); box.hidden = false; accMsg = ""; renderAccount(); $("#accEmail")?.focus(); }
+  else if (d.vb === "back") { exitView(); showTab("friends"); }
+  else if (d.follow) { if (!me) { showTab("friends"); toast("Make your profile first, so people know who's asking."); return; } socialAct(() => sb.from("follows").insert({follower:myId(), followee:d.follow, status:"pending"}), "Request sent"); }
+  else if (d.unfollow) { const pending = relOut(d.unfollow)?.status === "pending"; socialAct(() => sb.from("follows").delete().eq("follower", myId()).eq("followee", d.unfollow), pending ? "Request cancelled" : "Unfollowed"); }
+  else if (d.approve) socialAct(() => sb.from("follows").update({status:"accepted"}).eq("follower", d.approve).eq("followee", myId()), "Approved. They can now see what you share with followers.");
+  else if (d.decline) socialAct(() => sb.from("follows").delete().eq("follower", d.decline).eq("followee", myId()), "Request declined");
+  else if (d.rmfollower) socialAct(() => sb.from("follows").delete().eq("follower", d.rmfollower).eq("followee", myId()), "Removed from your followers");
+  else if (d.profile) viewProfile(d.profile);
+  else if (d.fopen) { const [u, t] = d.fopen.split("|"); viewProfile(u, t); }
+});
+$("#tab-friends").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (e.target.id === "frSearch") { clearTimeout(frT); searchPeople($("#frQ").value); return; }
+  if (e.target.id !== "frProfile") return;
+  const username = $("#frUser").value.trim().toLowerCase().replace(/^@/, ""), name = $("#frName").value.trim();
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) { social.msg = "Usernames are 3 to 20 lowercase letters, numbers or underscores."; renderFriends(); $("#frUser").value = username; $("#frName").value = name; return; }
+  const { error } = await sb.from("profiles").insert({id:myId(), username, display_name:name});
+  if (error) { social.msg = error.code === "23505" ? "That username is taken. Try another." : "Couldn't create your profile. Try again."; renderFriends(); $("#frUser").value = username; $("#frName").value = name; return; }
+  social.msg = ""; toast("Profile created"); loadSocial();
+});
+$("#tab-friends").addEventListener("input", e => { if (e.target.id === "frQ") { clearTimeout(frT); const v = e.target.value; frT = setTimeout(() => searchPeople(v), 300); } });
+$("#tab-friends").addEventListener("change", e => { if (e.target.dataset.avatar !== undefined && e.target.files?.[0]) setAvatar(e.target.files[0]); });
+
+/* ---------- tabs ---------- */
+function showTab(name){
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+  ["places","trips","friends","chat"].forEach(n => $("#tab-" + n).hidden = n !== name);
+  if (name === "friends") renderFriends();
+  try { localStorage.setItem(LS_KEY + ".tab", name); } catch {}
+  if (name === "chat") { renderChat(); getSample().then(s => { if (!s) { sample = false; renderChat(); } }); }
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+/* ---------- render all ---------- */
+function render(){
+  const countries = all("country"), cities = all("city"), trips = all("trip");
+  $("#sCountries").textContent = countries.length;
+  $("#sPct").textContent = Math.round(countries.filter(c => featByName.has(c.name)).length / 195 * 100) + "%";
+  $("#sCities").textContent = cities.length;
+  $("#sTrips").textContent = trips.length;
+  $("#sKm").textContent = Math.round(trips.reduce((s,t) => s + routeKm(routeCoords(t)), 0)).toLocaleString();
+  $("#welcome").hidden = !!(countries.length || cities.length || trips.length || draft || wiz);
+  renderPlaces(); renderTrips();
+  if (!$("#tab-chat").hidden) renderChat();
+  if (features.length) drawOverlay();
+  if (found) renderFound();
+}
+
+/* ---------- boot ---------- */
+async function boot(){
+  try { const t = localStorage.getItem(LS_KEY + ".tab"); if (t) showTab(t); } catch {}
+  try { fillColor = localStorage.getItem(LS_KEY + ".fill") || null; } catch {}
+  try { const w = JSON.parse(localStorage.getItem(WIZ_KEY) || "null"); if (w && Array.isArray(w.stops) && w.next) { wiz = {...w, busy:false, err:"", confirmCancel:false}; showTab("trips"); } } catch {}
+  renderSwatches();
+  probeStreet();
+  try { if (localStorage.getItem(LS_KEY + ".style") === "sat") { mapStyle = "sat"; projection = projEQ; path.projection(projection); gImg.attr("href", "earth.jpg"); $("#mapwrap").classList.add("sat"); $("#styleMap").setAttribute("aria-pressed", false); $("#styleSat").setAttribute("aria-pressed", true); } } catch {}
+  render();
+  try {
+    const topo = await (await fetch("countries.json")).json();
+    features = topojson.feature(topo, topo.objects.countries).features.filter(f => f.properties?.name);
+    features.forEach(f => featByName.set(f.properties.name, f));
+    countryNames = [...featByName.keys()].sort((a,b) => a.localeCompare(b));
+    $("#countryList").innerHTML = countryNames.map(n => `<option value="${esc(n)}">`).join("");
+    drawCountries(); layout();
+    (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => loadCities());   // so suggestions are instant
+  } catch(e) {
+    const m = $("#maperr"); m.hidden = false; m.textContent = "The world map didn't load. Reload the page to try again.";
+  }
+  render();
+  initStore().catch(() => setBadge());
+}
+boot();
+})();
+</script>
+
+</body>
+</html>
