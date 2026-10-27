@@ -1413,7 +1413,9 @@ function renderFound(){
         ${none && def ? `<button class="btn sm" data-f="usedefault">Use default photo</button>` : ""}
         ${effPhoto(cdoc) ? `<button class="btn sm" data-f="frame" style="border-color:var(--accent);color:var(--accent)">Adjust photo</button>` : ""}
         ${(cdoc.color || null) !== fillColor ? `<button class="btn sm" data-f="recolour">Use the selected colour</button>` : ""}
-        <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`; })()
+        ${f.confirmRemove ? "" : `<button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button>`}</div>
+        ${f.confirmRemove ? (() => { const n = linkedPlaces(f.name), parts = [n.cities.length && `${n.cities.length} cit${n.cities.length === 1 ? "y" : "ies"}`, n.regions.length && `${n.regions.length} ${REGION_GROUP[f.name] === "US" ? "state" : "province"}${n.regions.length === 1 ? "" : "s"}`].filter(Boolean);
+          return `<div class="confirm">Remove ${esc(f.name)} and its ${parts.join(" and ")}? <button class="btn sm danger" data-f="uncountryok">Remove</button><button class="btn ghost sm" data-f="uncountrykeep">Keep</button></div>`; })() : ""}`; })()
       : `<div class="row"><button class="btn primary sm" data-f="country">Mark as visited</button>${shown().has("w_" + slug(f.name)) ? `<button class="btn sm" data-f="unwish">Remove from bucket list</button>` : `<button class="btn sm" data-f="wish">Add to bucket list</button>`}</div>`}
       ${on ? (() => { const cs = all("city").filter(c => c.country === f.name).map(c => c.name).sort();
         return `<div class="hint" style="margin:0">${cs.length ? `Cities (${cs.length}): ${esc(cs.join(", "))}` : viewing ? "No cities saved here." : "No cities saved here yet."}</div>
@@ -1444,7 +1446,9 @@ $("#found").addEventListener("click", e => {
   if (a === "frcancel") { endFraming(false); return; }
   if (a === "frreset") { setFrame({...FRAME0}); return; }
   if (a === "country") { const n = f.type === "country" ? f.name : f.country; addCountry(n, true); if (fillColor) { const id = "c_" + slug(n); store.put(id, {...docs.get(id), color:fillColor}); } toast(`Marked ${n} as visited`); }
-  if (a === "uncountry") { const ph = docs.get("c_" + slug(f.name))?.photo; if (ph?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([ph.path]); store.remove("c_" + slug(f.name)); toast(`Removed ${f.name}`); }
+  if (a === "uncountry") { const n = linkedPlaces(f.name); if (n.cities.length || n.regions.length) { f.confirmRemove = true; renderFound(); return; } removeCountry(f.name); }
+  if (a === "uncountrykeep") { f.confirmRemove = false; renderFound(); return; }
+  if (a === "uncountryok") { f.confirmRemove = false; removeCountry(f.name); }
   if (a === "rmcphoto") { removeCountryPhoto(f.name); return; }
   if (a === "nophoto") { const id = "c_" + slug(f.name); store.put(id, {...docs.get(id), photo:{none:true}}); }
   if (a === "usedefault") { const id = "c_" + slug(f.name), { photo, ...rest } = docs.get(id); store.put(id, rest); }
@@ -1593,6 +1597,20 @@ async function addHereStep(f, tripId){
   if (f.name) addCity({name:f.name, country:f.country, lat:f.lat, lng:f.lng, private:priv}); else if (f.country) addCountry(f.country, true, priv);
   toast(`Added ${f.name || "your location"} as step ${days.length} of ${t.title}`);
   found = null; renderFound(); drawFound(); openTrip = tripId; selectedTrip = tripId; showTab("trips"); render();
+}
+// a country's saved cities, and for the USA and Canada its states/provinces, go with it
+function linkedPlaces(name){
+  const group = REGION_GROUP[name];
+  return {cities: all("city").filter(c => c.country === name), regions: group ? all("region").filter(r => r.group === group) : []};
+}
+function removeCountry(name){
+  const id = "c_" + slug(name), ph = docs.get(id)?.photo, {cities, regions} = linkedPlaces(name);
+  if (ph?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([ph.path]);
+  [...cities, ...regions].forEach(x => store.remove(x.id));
+  store.remove(id);
+  const extra = [cities.length && `${cities.length} cit${cities.length === 1 ? "y" : "ies"}`, regions.length && `${regions.length} state${regions.length === 1 ? "" : "s"}/province${regions.length === 1 ? "" : "s"}`].filter(Boolean);
+  toast(`Removed ${name}${extra.length ? " and its " + extra.join(" and ") : ""}`);
+  if (dive?.country === name) endDive();
 }
 function toggleWish(name){
   if (viewing) return;
