@@ -324,6 +324,39 @@ body.viewing .own-only{display:none!important}
 #map .route.m-walk,#map .route.m-bike{stroke-dasharray:1 4}
 .mode-pill{display:inline-block;font-family:var(--body);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:0 6px;line-height:17px;vertical-align:1px}
 .tp-modes{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.usagewarn{flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:color-mix(in srgb, var(--warn) 12%, var(--panel));border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:13px}
+.usagewarn b{color:var(--warn)}
+.usage-meter{display:grid;gap:6px;font-size:12.5px}
+.usage-meter .bar{height:6px;border-radius:3px;background:var(--soft);overflow:hidden}
+.usage-meter .bar i{display:block;height:100%;background:var(--visited)}
+.usage-meter .bar i.hot{background:var(--warn)}
+.pick-thumbs{display:flex;flex-wrap:wrap;gap:6px}
+.pick-thumbs span{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--soft)}
+.pick-thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.pick-thumbs button{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:1;padding:0}
+.flaggrid{display:grid;grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));gap:8px 6px}
+.flaggrid.sm{grid-template-columns:repeat(auto-fill, minmax(68px, 1fr))}
+.flagcard{display:grid;gap:5px;justify-items:center;align-content:start;text-align:center;background:none;border:0;padding:6px 2px;border-radius:8px;font-size:11.5px;line-height:1.25;color:var(--ink);min-width:0}
+.flagcard:hover{background:var(--soft)}
+.flagcard img,.flagcard .flagph{width:100%;max-width:72px;aspect-ratio:3/2;object-fit:contain;border-radius:3px;display:block}
+.flagcard img{filter:drop-shadow(0 0 .5px rgba(0,0,0,.35))}
+.flagcard .flagph{background:var(--soft);border:1px dashed var(--line)}
+.flaggrid.sm .flagcard img,.flaggrid.sm .flagcard .flagph{max-width:56px}
+.flagcard span{overflow-wrap:anywhere}
+.flagcard.off img{filter:grayscale(1);opacity:.32}
+.flagcard.off{color:var(--muted)}
+.flagcard.on span{font-weight:600}
+details.regions{border-top:1px solid var(--line);padding-top:12px}
+details.regions summary{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+details.regions summary::-webkit-details-marker{display:none}
+details.regions summary > span:first-child{text-align:left}
+details.regions summary > span:first-child::before{content:"▸  "}
+details.regions[open] summary > span:first-child::before{content:"▾  "}
+details.regions summary .mono{font-family:var(--mono);text-transform:none;letter-spacing:0;white-space:nowrap}
+details.regions .hint{margin:8px 0}
+.defphoto{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.defphoto img,.defphoto .flagph{width:84px;height:56px;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
+.defphoto .flagph{border:1px dashed var(--line)}
 .toast{z-index:70;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:50;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
 
 @media (max-width: 860px){
@@ -345,6 +378,7 @@ body.viewing .own-only{display:none!important}
       <h1>Been There Atlas</h1>
     </div>
     <div class="viewbar" id="viewbar" hidden></div>
+    <div class="usagewarn" id="usageWarn" role="alert" hidden></div>
     <div class="stats" aria-live="polite">
       <div class="stat"><b id="sCountries">0</b><span>Countries</span></div>
       <div class="stat"><b id="sPct">0%</b><span>of 195</span></div>
@@ -430,12 +464,28 @@ body.viewing .own-only{display:none!important}
 
       <div class="tabpane" id="tab-places" role="tabpanel">
         <div class="sec own-only">
-          <h3>Add a country</h3>
-          <form class="row" id="addCountryForm">
-            <input id="addCountry" type="text" list="countryList" placeholder="Start typing… e.g. Portugal" autocomplete="off" style="flex:1 1 180px">
+          <h3>Default country photo</h3>
+          <div class="defphoto" id="defPhoto"></div>
+          <p class="hint" style="margin-top:6px">Fills every country you've visited. To change just one country, tap it on the map and give it its own photo.</p>
+        </div>
+        <div class="sec">
+          <h3>Countries <span class="mono" id="cCount">0</span></h3>
+          <form class="row own-only" id="addCountryForm" style="margin-bottom:10px">
+            <input id="addCountry" type="text" list="countryList" placeholder="Add a country… e.g. Portugal" autocomplete="off" style="flex:1 1 180px">
             <button class="btn primary" type="submit">Add</button>
           </form>
+          <div class="flaggrid" id="countryFlags"></div>
         </div>
+        <details class="sec regions" id="usSec">
+          <summary><span>US states and DC</span><span class="mono" id="usCount">0 of 51</span></summary>
+          <p class="hint own-only">Tap a state to add it. Tap again to remove it.</p>
+          <div class="flaggrid sm" id="usFlags"></div>
+        </details>
+        <details class="sec regions" id="caSec">
+          <summary><span>Canadian provinces and territories</span><span class="mono" id="caCount">0 of 13</span></summary>
+          <p class="hint own-only">Tap a province or territory to add it. Tap again to remove it.</p>
+          <div class="flaggrid sm" id="caFlags"></div>
+        </details>
         <div class="sec own-only">
           <h3>Add a city</h3>
           <form class="row" id="addCityForm">
@@ -444,10 +494,6 @@ body.viewing .own-only{display:none!important}
             <button class="btn primary" type="submit" id="addCityBtn">Add</button>
           </form>
           <p class="hint" id="cityHint" style="margin-top:6px">The AI finds the exact spot. You can also use <b>Drop city pin</b> on the map.</p>
-        </div>
-        <div class="sec">
-          <h3>Countries <span class="mono" id="cCount">0</span></h3>
-          <div class="chips" id="countryChips"></div>
         </div>
         <div class="sec">
           <h3>Cities <span class="mono" id="ciCount">0</span></h3>
@@ -581,9 +627,10 @@ async function cloudLoad(){
   try { localStorage.removeItem(LS_KEY); } catch {}
   render();
 }
-async function enterCloud(user){ cloudUser = user; store.mode = "cloud"; setBadge(); renderAccount(); await cloudLoad(); loadSocial(); }
+async function enterCloud(user){ cloudUser = user; store.mode = "cloud"; setBadge(); renderAccount(); await cloudLoad(); loadSocial(); checkUsage(); }
 function leaveCloud(){
   cloudUser = null; store.mode = "local"; urlCache.clear(); docs.clear(); openTrip = null; selectedTrip = null;
+  usage = null; renderUsage();
   viewing = null; document.body.classList.remove("viewing"); me = null; social = freshSocial(); renderViewbar(); updateFriendBadge(); renderFriends();
   for (const [k, v] of Object.entries(store.readLocal())) docs.set(k, v);
   setBadge(); renderAccount(); render();
@@ -598,7 +645,7 @@ async function initStore(){
     });
     const { data } = await sb.auth.getSession();
     if (data?.session?.user && !cloudUser) await enterCloud(data.session.user);
-    window.addEventListener("focus", () => { if (store.mode === "cloud" && Date.now() - lastCloudLoad > 30000 && !lb) { cloudLoad(); loadSocial(); } });
+    window.addEventListener("focus", () => { if (store.mode === "cloud" && Date.now() - lastCloudLoad > 30000 && !lb) { cloudLoad(); loadSocial(); checkUsage(); } });
     $("#tb-friends").hidden = false;
     setBadge(); return;
   }
@@ -621,13 +668,38 @@ async function initStore(){
   }, () => { store.toLocal(); toast("Lost the connection to your account. Saving on this device."); });
 }
 
+/* ---------- free-plan usage (website version; shown only to the owner set in app_settings) ---------- */
+let usage = null;
+const usagePct = u => ({db: u.db_bytes / u.db_limit * 100, photos: u.photo_bytes / u.photo_limit * 100});
+const fmtMB = b => b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : Math.round(b / 1e6) + " MB";
+async function checkUsage(){
+  if (!sb || store.mode !== "cloud") return;
+  const { data, error } = await sb.rpc("usage_summary");
+  usage = !error && data?.is_owner ? data : null;   // older setups without the function just show nothing
+  renderUsage(); renderAccount();
+}
+function renderUsage(){
+  const box = $("#usageWarn");
+  if (!usage) { box.hidden = true; return; }
+  const pct = usagePct(usage), hot = [];
+  if (pct.photos >= 95) hot.push(`photo storage is <b>${Math.floor(pct.photos)}% full</b> (${fmtMB(usage.photo_bytes)} of ${fmtMB(usage.photo_limit)})`);
+  if (pct.db >= 95) hot.push(`the database is <b>${Math.floor(pct.db)}% full</b> (${fmtMB(usage.db_bytes)} of ${fmtMB(usage.db_limit)})`);
+  box.hidden = !hot.length;
+  if (hot.length) box.innerHTML = `<span>Only you see this: the free Supabase plan is nearly used up. ${hot.join(" and ")}. Delete some photos or upgrade the Supabase project to keep uploads working.</span>`;
+}
+function usageMeter(){
+  if (!usage) return "";
+  const pct = usagePct(usage), row = (label, p, used, lim) => `<div>${label}: ${fmtMB(used)} of ${fmtMB(lim)} (${Math.floor(p)}%)<div class="bar"><i class="${p >= 95 ? "hot" : ""}" style="width:${Math.min(100, p).toFixed(1)}%"></i></div></div>`;
+  return `<div class="usage-meter"><b>Free plan usage (only you see this)</b>${row("Photos", pct.photos, usage.photo_bytes, usage.photo_limit)}${row("Database", pct.db, usage.db_bytes, usage.db_limit)}</div>`;
+}
+
 /* ---------- account panel (website version) ---------- */
 let accMsg = "", accBusy = false;
 function renderAccount(){
   const box = $("#account"); if (box.hidden) return;
   const close = `<button class="btn ghost sm x" data-acc="close" aria-label="Close">×</button>`;
   if (cloudUser) {
-    box.innerHTML = close + `<h2 id="accTitle">Your account</h2><p class="hint">Signed in as <b>${esc(cloudUser.email || "")}</b>. Your trips and photos are saved to your account, so they're on any device you sign in from.</p>
+    box.innerHTML = close + `<h2 id="accTitle">Your account</h2><p class="hint">Signed in as <b>${esc(cloudUser.email || "")}</b>. Your trips and photos are saved to your account, so they're on any device you sign in from.</p>${usageMeter()}
       <div class="row"><button class="btn" data-acc="out">Sign out</button></div>`;
     return;
   }
@@ -762,10 +834,13 @@ function drawCountries(){
     .on("mouseleave", hideTip)
     .on("click", (e,d) => { if (mode === "country") toggleCountry(d.properties.name); });
 }
-// a visited country can show a photo clipped to its outline
+// a visited country shows its own photo, otherwise the default photo, clipped to its outline
+const defaultPhoto = () => shown().get("settings")?.defaultPhoto || null;
+const usable = ph => ph && (ph.data || (ph.path && store.mode === "cloud"));
+function effPhoto(c){ if (c.photo?.none) return null; return usable(c.photo) ? c.photo : usable(defaultPhoto()) ? defaultPhoto() : null; }
 function drawCountryPhotos(){
-  const list = all("country").filter(c => c.photo && featByName.has(c.name) && (c.photo.data || (c.photo.path && store.mode === "cloud")));
-  const sel = gCPhotos.selectAll("g.cphoto").data(list, d => d.id + "|" + (d.photo.path || "local"))
+  const list = all("country").filter(c => featByName.has(c.name)).map(c => ({...c, photo: effPhoto(c)})).filter(c => c.photo);
+  const sel = gCPhotos.selectAll("g.cphoto").data(list, d => d.id + "|" + (d.photo.path || d.photo.data.length))
     .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("image").attr("preserveAspectRatio", "xMidYMid slice"); g.append("path").attr("class", "cp-outline"); return g; });
   sel.each(function(d){
     const f = featByName.get(d.name), shape = path(f), [[x0, y0], [x1, y1]] = path.bounds(f), g = d3.select(this), cid = "cclip-" + d.id;
@@ -782,19 +857,37 @@ async function hydrateCountryPhotos(){
   await signUrls(ims.map(n => n.dataset.path));
   ims.forEach(n => { const u = urlCache.get(n.dataset.path)?.url; if (u) n.setAttribute("href", u); });
 }
+async function storePhoto(docId, file){
+  if (store.mode === "cloud") {
+    const blob = await shrink(file, 1800), p = `${cloudUser.id}/${docId}/${uid()}.jpg`;
+    const { error } = await sb.storage.from(BUCKET).upload(p, blob, {contentType:"image/jpeg"}); if (error) throw error;
+    return {path:p};
+  }
+  // no photo storage here, so keep a small copy inside the saved data
+  const blob = await shrink(file, 700);
+  return {data: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); })};
+}
+async function setDefaultPhoto(file){
+  if (!file) return;
+  toast("Adding your default photo…");
+  try {
+    const photo = await storePhoto("settings", file), old = docs.get("settings")?.defaultPhoto;
+    await store.put("settings", {...(docs.get("settings") || {}), kind:"settings", defaultPhoto:photo});
+    if (old?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([old.path]);
+    toast("Default photo set. It now fills every country you've visited.");
+  } catch { toast("Couldn't add that photo. Try a JPEG."); }
+}
+async function removeDefaultPhoto(){
+  const cur = docs.get("settings"); if (!cur?.defaultPhoto) return;
+  if (cur.defaultPhoto.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([cur.defaultPhoto.path]);
+  const { defaultPhoto: _, ...rest } = cur;
+  await store.put("settings", rest); toast("Default photo removed");
+}
 async function setCountryPhoto(name, file){
   const id = "c_" + slug(name); if (!docs.get(id) || !file) return;
   toast("Adding your photo…");
   try {
-    let photo;
-    if (store.mode === "cloud") {
-      const blob = await shrink(file, 1800), p = `${cloudUser.id}/${id}/${uid()}.jpg`;
-      const { error } = await sb.storage.from(BUCKET).upload(p, blob, {contentType:"image/jpeg"}); if (error) throw error;
-      photo = {path:p};
-    } else {   // no photo storage here, so keep a small copy inside the saved country
-      const blob = await shrink(file, 700);
-      photo = {data: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); })};
-    }
+    const photo = await storePhoto(id, file);
     const old = docs.get(id)?.photo;
     await store.put(id, {...docs.get(id), photo});
     if (old?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([old.path]);
@@ -803,7 +896,7 @@ async function setCountryPhoto(name, file){
   renderFound();
 }
 async function removeCountryPhoto(name){
-  const id = "c_" + slug(name), cur = docs.get(id); if (!cur?.photo) return;
+  const id = "c_" + slug(name), cur = docs.get(id); if (!usable(cur?.photo) && !cur?.photo?.path) return;
   if (cur.photo.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([cur.photo.path]);
   const { photo, ...rest } = cur;
   await store.put(id, rest); toast("Photo removed"); renderFound();
@@ -1034,11 +1127,14 @@ function renderFound(){
     const cdoc = shown().get("c_" + slug(f.name)), on = !!cdoc;
     if (viewing) body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited by " + esc(firstName(viewing.profile)) : "Not visited"}</span></div>`;
     else body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited" : "Country"}</span></div>
-      ${on ? `<p class="hint" style="margin:0">${cdoc.photo ? "Filled with your photo." : "Fill the country's shape on the map with one of your photos."}</p>
-      <div class="row"><label class="btn primary sm" style="cursor:pointer">${cdoc.photo ? "Change photo" : "Fill with a photo"}<input type="file" accept="image/*" data-cphoto hidden></label>
-        ${cdoc.photo ? `<button class="btn sm" data-f="rmcphoto">Remove photo</button>` : ""}
+      ${on ? (() => { const own = usable(cdoc.photo), none = !!cdoc.photo?.none, def = !!usable(defaultPhoto());
+        return `<p class="hint" style="margin:0">${own ? "Filled with its own photo." : none ? "Showing your colour instead of a photo." : def ? "Filled with your default photo." : "Fill the country's shape on the map with one of your photos."}</p>
+      <div class="row"><label class="btn primary sm" style="cursor:pointer">${own ? "Change photo" : def ? "Use a different photo" : "Fill with a photo"}<input type="file" accept="image/*" data-cphoto hidden></label>
+        ${own ? `<button class="btn sm" data-f="rmcphoto">${def ? "Go back to default photo" : "Remove photo"}</button>` : ""}
+        ${!own && def && !none ? `<button class="btn sm" data-f="nophoto">Show colour instead</button>` : ""}
+        ${none && def ? `<button class="btn sm" data-f="usedefault">Use default photo</button>` : ""}
         ${(cdoc.color || null) !== fillColor ? `<button class="btn sm" data-f="recolour">Use the selected colour</button>` : ""}
-        <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`
+        <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`; })()
       : `<div class="row"><button class="btn primary sm" data-f="country">Mark as visited</button></div>`}`;
   } else {
     const id = "p_" + slug(f.name + "-" + (f.country || "")), saved = docs.has(id);
@@ -1057,6 +1153,8 @@ $("#found").addEventListener("click", e => {
   if (a === "country") { const n = f.type === "country" ? f.name : f.country; addCountry(n, true); if (fillColor) { const id = "c_" + slug(n); store.put(id, {...docs.get(id), color:fillColor}); } toast(`Marked ${n} as visited`); }
   if (a === "uncountry") { const ph = docs.get("c_" + slug(f.name))?.photo; if (ph?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([ph.path]); store.remove("c_" + slug(f.name)); toast(`Removed ${f.name}`); }
   if (a === "rmcphoto") { removeCountryPhoto(f.name); return; }
+  if (a === "nophoto") { const id = "c_" + slug(f.name); store.put(id, {...docs.get(id), photo:{none:true}}); }
+  if (a === "usedefault") { const id = "c_" + slug(f.name), { photo, ...rest } = docs.get(id); store.put(id, rest); }
   if (a === "recolour") { const id = "c_" + slug(f.name); store.put(id, {...docs.get(id), color:fillColor}); toast(`Recoloured ${f.name}`); }
   if (a === "city") { addCity({name:f.name, country:f.country, lat:f.lat, lng:f.lng}); toast(`Added ${f.name} to your cities`); }
   if (a === "uncity") { store.remove("p_" + slug(f.name + "-" + (f.country || ""))); toast(`Removed ${f.name}`); }
@@ -1114,7 +1212,7 @@ function fmtLL(lat, lng){ return `${Math.abs(lat).toFixed(2)}°${lat>=0?"N":"S"}
 function toggleCountry(name){
   const id = "c_" + slug(name), cur = shown().get(id);
   if (viewing) { showFound({type:"country", name}); return; }
-  if (cur && (cur.color || null) !== fillColor && !cur.photo) { store.put(id, {...cur, color:fillColor}); toast(`Recoloured ${name}. Tap it again to add a photo.`); }
+  if (cur && (cur.color || null) !== fillColor && !effPhoto(cur)) { store.put(id, {...cur, color:fillColor}); toast(`Recoloured ${name}. Tap it again to add a photo.`); }
   else if (cur) showFound({type:"country", name});
   else { store.put(id, {kind:"country", name, color:fillColor, addedAt:Date.now()}); toast(`Marked ${name} as visited. Tap it again to fill it with a photo.`); }
 }
@@ -1201,18 +1299,55 @@ async function saveTrip(t, source){
 }
 
 /* ---------- render: places ---------- */
+/* flags: one file with every country, US state, DC and Canadian province, loaded once */
+let FLAGS = null, flagsLoading = null;
+function loadFlags(){
+  if (!flagsLoading) flagsLoading = fetch("flags.json").then(r => r.json()).then(d => { FLAGS = d; renderPlaces(); return d; }).catch(() => { flagsLoading = null; return null; });
+  return flagsLoading;
+}
+const REGION_COUNTRY = {US: "United States of America", CA: "Canada"};
+const flagImg = (src, label) => src ? `<img src="${src}" alt="Flag of ${esc(label)}" loading="lazy">` : `<span class="flagph" aria-hidden="true"></span>`;
+function renderRegionGroup(group, gridSel, countSel, secSel){
+  const all_ = (FLAGS?.regions || []).filter(r => r.group === group).sort((a, b) => a.name.localeCompare(b.name));
+  const have = new Set(all("region").filter(r => r.group === group).map(r => r.code));
+  $(countSel).textContent = `${have.size} of ${all_.length || (group === "US" ? 51 : 13)}`;
+  const list = viewing ? all_.filter(r => have.has(r.code)) : all_;
+  $(gridSel).innerHTML = !FLAGS ? `<p class="hint">Loading flags…</p>`
+    : list.length ? list.map(r => `<button class="flagcard ${have.has(r.code) ? "on" : "off"}" data-region="${r.code}" aria-pressed="${have.has(r.code)}" title="${have.has(r.code) ? "Visited" : "Not visited yet"}">${flagImg(r.img, r.name)}<span>${esc(r.name)}</span></button>`).join("")
+    : `<p class="hint">None yet.</p>`;
+  if (have.size && !$(secSel).dataset.touched) $(secSel).open = true;
+}
 function renderPlaces(){
   const countries = all("country").sort((a,b) => a.name.localeCompare(b.name));
   $("#cCount").textContent = countries.length;
-  $("#countryChips").innerHTML = countries.length ? countries.map(c => `<span class="chip"><i class="cdot" style="background:${esc(c.color || "var(--visited)")}"></i>${esc(c.name)}<button class="own-only" data-rmc="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">×</button></span>`).join("")
-    : `<div class="empty-note" style="width:100%">No countries yet. Tap one on the map or add it above.</div>`;
+  $("#countryFlags").innerHTML = countries.length ? countries.map(c => `<button class="flagcard" data-cflag="${esc(c.name)}" title="Show ${esc(c.name)} on the map">${flagImg(FLAGS?.countries[c.name], c.name)}<span>${esc(c.name)}</span></button>`).join("")
+    : `<div class="empty-note" style="grid-column:1 / -1">${viewing ? "No countries shared yet." : "No countries yet. Tap one on the map or add it above, and its flag appears here."}</div>`;
+  const dp = docs.get("settings")?.defaultPhoto;
+  $("#defPhoto").innerHTML = (dp?.data ? `<img src="${dp.data}" alt="Your default country photo">` : dp?.path && store.mode === "cloud" ? `<img data-path="${esc(dp.path)}" alt="Your default country photo">` : `<span class="flagph" aria-hidden="true"></span>`)
+    + `<label class="btn ${dp ? "" : "primary "}sm" style="cursor:pointer">${dp ? "Change" : "Choose a photo"}<input type="file" accept="image/*" data-defphoto hidden></label>`
+    + (dp ? `<button class="btn ghost sm" data-defrm="1">Remove</button>` : "");
+  hydratePhotos($("#defPhoto"));
+  renderRegionGroup("US", "#usFlags", "#usCount", "#usSec");
+  renderRegionGroup("CA", "#caFlags", "#caCount", "#caSec");
   const cities = all("city").sort((a,b) => (a.country||"").localeCompare(b.country||"") || a.name.localeCompare(b.name));
   $("#ciCount").textContent = cities.length;
   $("#cityList").innerHTML = cities.length ? cities.map(c => `<div class="li"><span class="dot"></span><div class="grow"><div>${esc(c.name)}</div><div class="sub">${esc(c.country||"Unknown country")} · <span class="mono">${fmtLL(c.lat,c.lng)}</span>${c.approx ? " · approximate" : ""}</div></div><button class="btn ghost sm" data-zoomc="${esc(c.id)}">Show</button><button class="btn ghost sm own-only" data-rmp="${esc(c.id)}" aria-label="Remove ${esc(c.name)}">×</button></div>`).join("")
     : `<div class="empty-note">No cities yet. Add one above, drop a pin, or save a trip.</div>`;
 }
+$("#tab-places").addEventListener("change", e => { if (e.target.dataset.defphoto !== undefined && e.target.files?.[0]) setDefaultPhoto(e.target.files[0]); });
+["#usSec", "#caSec"].forEach(sel => $(sel).addEventListener("toggle", () => { $(sel).dataset.touched = "1"; }));
 $("#tab-places").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.defrm) { removeDefaultPhoto(); return; }
+  if (b.dataset.cflag) { const n = b.dataset.cflag; showFound({type:"country", name:n}); zoomToFeature(featByName.get(n)); return; }
+  if (b.dataset.region) {
+    if (viewing) return;
+    const r = FLAGS?.regions.find(x => x.code === b.dataset.region); if (!r) return;
+    const id = "r_" + r.code.toLowerCase();
+    if (docs.has(id)) { store.remove(id); toast(`Removed ${r.name}`); }
+    else { store.put(id, {kind:"region", code:r.code, name:r.name, group:r.group, addedAt:Date.now()}); addCountry(REGION_COUNTRY[r.group], true); toast(`Added ${r.name}`); }
+    return;
+  }
   if (b.dataset.rmc) { const n = docs.get(b.dataset.rmc)?.name; store.remove(b.dataset.rmc); toast(`Removed ${n}`); }
   if (b.dataset.rmp) { store.remove(b.dataset.rmp); }
   if (b.dataset.zoomc) { const c = docs.get(b.dataset.zoomc); if (c) svg.transition().duration(600).call(zoom.transform, d3.zoomIdentity.translate(W/2,H/2).scale(Math.max(6, cityK())).translate(...projection([c.lng,c.lat]).map(v => -v))); }
@@ -1337,14 +1472,38 @@ async function shrink(file, max = 1800){
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Blob([bytes], { type: "image/jpeg" });
 }
+const MAX_TRIP_PHOTOS = 10;
+// photos chosen while a trip is being written, uploaded once it's saved (kept off the saved draft: files can't be stored there)
+const pendingFiles = new WeakMap();   // step or day object -> File[]
+const fileURLs = new WeakMap();
+const fileURL = f => { if (!fileURLs.has(f)) fileURLs.set(f, URL.createObjectURL(f)); return fileURLs.get(f); };
+function pickFiles(holder, files, alreadyUsed){
+  const cur = pendingFiles.get(holder) || [], room = MAX_TRIP_PHOTOS - alreadyUsed;
+  const list = [...files].filter(f => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+  if (room <= 0) { toast(`A trip can have up to ${MAX_TRIP_PHOTOS} photos.`); return; }
+  if (list.length > room) toast(`A trip can have up to ${MAX_TRIP_PHOTOS} photos, so only ${room} more ${room === 1 ? "was" : "were"} added.`);
+  pendingFiles.set(holder, [...cur, ...list.slice(0, room)]);
+}
+function pickerHTML(holder, key, used){
+  if (!photosEnabled()) return "";
+  const files = pendingFiles.get(holder) || [];
+  return `<div class="f"><span>Photos (optional)</span>
+    ${files.length ? `<div class="pick-thumbs">${files.map((f, i) => `<span><img src="${fileURL(f)}" alt=""><button type="button" data-unpick="${key}|${i}" aria-label="Remove photo">×</button></span>`).join("")}</div>` : ""}
+    <div class="row" style="align-items:center">${used < MAX_TRIP_PHOTOS ? `<label class="btn ghost sm addph">+ Add photos<input type="file" accept="image/*" multiple data-pick="${key}" hidden></label>` : ""}<span class="hint">${used} of ${MAX_TRIP_PHOTOS} photos for this trip</span></div></div>`;
+}
+const pendingCount = holders => holders.reduce((n, h) => n + (pendingFiles.get(h)?.length || 0), 0);
+function uploadPending(tripId, holders){ holders.forEach((h, i) => { const fs = pendingFiles.get(h); if (fs?.length) { uploadPhotos(tripId, fs, i); pendingFiles.delete(h); } }); }
 let uploadQueue = Promise.resolve();
 function uploadPhotos(tripId, files, day){   // one batch at a time, so batches can't overwrite each other
-  const list = [...files].slice(0, 30);
+  const list = [...files].slice(0, MAX_TRIP_PHOTOS);
   uploadQueue = uploadQueue.then(() => uploadBatch(tripId, list, day)).catch(() => {});
   return uploadQueue;
 }
 async function uploadBatch(tripId, list, day){
   if (!photosEnabled()) { toast(photoHint()); return; }
+  const room = MAX_TRIP_PHOTOS - (docs.get(tripId)?.photos?.length || 0);
+  if (room <= 0) { toast(`This trip already has ${MAX_TRIP_PHOTOS} photos, the most a trip can have.`); return; }
+  if (list.length > room) { toast(`A trip can have up to ${MAX_TRIP_PHOTOS} photos, so only ${room} more will be added.`); list = list.slice(0, room); await new Promise(r => setTimeout(r, 1600)); }
   const added = [];
   for (let i = 0; i < list.length; i++) {
     toast(`Uploading photo ${i + 1} of ${list.length}…`);
@@ -1450,7 +1609,8 @@ function renderTripPage(pane, t){
   const cover = photos.find(p => p.path === t.cover) || photos[0];
   const showImgs = photosEnabled(), canPhoto = showImgs && !viewing;
   const thumb = p => `<button class="ph" data-ph="${esc(p.path)}" aria-label="Open photo${p.caption ? ": " + esc(p.caption) : ""}"><img data-path="${esc(p.path)}" alt="${esc(p.caption || "Trip photo")}" loading="lazy"></button>`;
-  const addBtn = (day, label) => canPhoto ? `<label class="btn ghost sm addph">${label}<input type="file" accept="image/*" multiple data-upload="${day}" hidden></label>` : "";
+  const full = photos.length >= MAX_TRIP_PHOTOS;
+  const addBtn = (day, label) => canPhoto && !full ? `<label class="btn ghost sm addph">${label}<input type="file" accept="image/*" multiple data-upload="${day}" hidden></label>` : "";
   const loose = photos.filter(p => p.day == null || !t.days[p.day]);
   pane.innerHTML = `<div class="tp" style="--trip:${tripColor(t)}">
     <div class="tp-top"><button class="btn ghost sm" data-act="back">← ${viewing ? esc(firstName(viewing.profile)) + "'s trips" : "My Trips"}</button>${!viewing && sb
@@ -1478,7 +1638,7 @@ function renderTripPage(pane, t){
         </div></li>`;
     }).join("")}</ol>
     ${loose.length && showImgs ? `<div class="sec"><h3>More photos <span class="mono">${loose.length}</span></h3><div class="pgrid">${loose.map(thumb).join("")}</div></div>` : ""}
-    ${canPhoto ? addBtn("", "+ Add photos to the whole trip") : viewing ? "" : `<p class="hint">${esc(photoHint())}</p>`}
+    ${canPhoto ? (full ? `<p class="hint">${MAX_TRIP_PHOTOS} of ${MAX_TRIP_PHOTOS} photos. Delete one to add another.</p>` : addBtn("", `+ Add photos to the whole trip (${photos.length} of ${MAX_TRIP_PHOTOS})`)) : viewing ? "" : `<p class="hint">${esc(photoHint())}</p>`}
     ${viewing ? "" : `<div class="trip-actions">
       <button class="btn sm" data-edit="${esc(t.id)}">Edit trip</button>
       ${confirmDel === t.id ? `<span class="confirm">Delete this trip${photos.length ? " and its " + photos.length + " photo" + (photos.length === 1 ? "" : "s") : ""}? <button class="btn sm danger" data-del="${esc(t.id)}">Delete</button><button class="btn ghost sm" data-nodel="1">Keep</button></span>`
@@ -1505,6 +1665,7 @@ function renderTripForm(pane){
           <label class="f">Country<input type="text" data-k="country" list="countryList" value="${esc(d.country)}" placeholder="Country"></label>
           <label class="f" style="flex:0 1 120px">Got there by<select data-k="transport">${modeOptions(d.transport)}</select></label></div>
         <label class="f">What you did<textarea data-k="notes" rows="2" placeholder="Sights, food, people">${esc(d.notes)}</textarea></label>
+        ${pickerHTML(d, "form:" + i, (t.photos?.length || 0) + pendingCount(t.days))}
       </div>`).join("")}</div>
       <button type="button" class="btn sm" data-act="addday" style="margin-top:8px">+ Add day</button>
     </div>
@@ -1522,6 +1683,12 @@ $("#tab-trips").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   const a = b.dataset;
   if (a.act === "journal") { startWiz(); return; }
+  if (a.unpick) {
+    const [key, i] = a.unpick.split("|"), [kind, idx] = key.split(":");
+    const holder = kind === "wiz" ? wiz?.next : (readForm(), editing?.days[+idx]);
+    const fs = holder && pendingFiles.get(holder); if (fs) { fs.splice(+i, 1); renderTrips(); }
+    return;
+  }
   if (wiz && handleWizClick(a)) return;
   if (a.act === "new") { editing = {title:"", start:"", end:"", companions:"", rating:"", notes:"", visibility:"followers", days:[blankDay()]}; renderTrips(); $("#tf-title").focus(); }
   else if (a.act === "cancel") { editing = null; renderTrips(); }
@@ -1543,6 +1710,12 @@ $("#tab-trips").addEventListener("click", e => {
 });
 $("#tab-trips").addEventListener("change", e => {
   const el = e.target;
+  if (el.dataset.pick && el.files?.length) {
+    const [kind, idx] = el.dataset.pick.split(":");
+    if (kind === "wiz" && wiz) { pickFiles(wiz.next, el.files, pendingCount([...wiz.stops, wiz.next])); renderTrips(); }
+    if (kind === "form" && editing) { readForm(); pickFiles(editing.days[+idx], el.files, (editing.photos?.length || 0) + pendingCount(editing.days)); renderTrips(); }
+    return;
+  }
   if (el.dataset.vis) { const t = docs.get(el.dataset.vis); if (t) { store.put(el.dataset.vis, {...t, visibility:el.value}); if (el.value !== "private") sharePlacesOf(t); toast(`This trip is now visible to: ${visLabel(el.value)}`); } return; } if (el.dataset.upload === undefined || !openTrip || !el.files?.length) return;
   uploadPhotos(openTrip, el.files, el.dataset.upload === "" ? null : +el.dataset.upload); el.value = "";
 });
@@ -1556,6 +1729,7 @@ $("#tab-trips").addEventListener("submit", async e => {
   const btn = $("#tf-save"); btn.disabled = true; btn.textContent = "Saving…";
   const id = await saveTrip(editing, "manual");
   toast(`Saved "${editing.title || "Untitled trip"}" to My Trips`);
+  uploadPending(id, editing.days);
   editing = null; openTrip = id; selectedTrip = null; render(); zoomTo(routeCoords(docs.get(id) || {days:[]}));
 });
 
@@ -1600,6 +1774,7 @@ async function addStop(){
   else await resolveDays([stop]);
   if (!wiz) return false;
   wiz.busy = false; wiz.confirmCancel = false;
+  if (pendingFiles.has(n)) { pendingFiles.set(stop, pendingFiles.get(n)); pendingFiles.delete(n); }
   wiz.stops.push(stop);
   wiz.next = blankStop(stop.until || addDays(stop.date, 1), stop.country, stop.transport);
   saveWiz(); render();
@@ -1613,7 +1788,9 @@ async function saveJournal(){
   const title = wiz.title.trim() || suggestTitle();
   const t = {title, start:wiz.stops[0]?.date || "", end:wiz.stops.map(s => s.until || s.date).filter(Boolean).sort().pop() || "",
     companions:wiz.companions, rating:wiz.rating, notes:wiz.notes, visibility:wiz.visibility || "followers", days:wiz.stops};
+  const stops = wiz.stops;
   const id = await saveTrip(t, "journal");
+  uploadPending(id, stops);
   wiz = null; saveWiz(); openTrip = id; selectedTrip = null; render();
   toast(`Saved "${title}" to My Trips`); zoomTo(routeCoords(docs.get(id) || {days:[]}));
 }
@@ -1649,7 +1826,7 @@ function renderWiz(pane){
     <div class="wizsteps"><span class="${w.phase==="stops"?"on":""}">1 · Steps in order</span><span class="${w.phase==="details"?"on":""}">2 · Name and save</span></div>`;
   const list = w.stops.length ? `<ol class="wiz-list">${w.stops.map((s,i) => `<li><span class="wiz-n">${i+1}</span>
     <div style="min-width:0"><div class="pl">${esc([s.city, s.country].filter(Boolean).join(", "))}${s.approx ? ` <span class="hint">(approx.)</span>` : ""}</div>
-    <div class="sub mono">${s.transport ? modeLabel(s.transport) + " · " : ""}${esc(fmtDate(s.date))}${s.until && s.until !== s.date ? " – " + esc(fmtDate(s.until)) : ""}</div>${s.notes ? `<div class="nt">${esc(s.notes)}</div>` : ""}</div>
+    <div class="sub mono">${s.transport ? modeLabel(s.transport) + " · " : ""}${esc(fmtDate(s.date))}${s.until && s.until !== s.date ? " – " + esc(fmtDate(s.until)) : ""}</div>${s.notes ? `<div class="nt">${esc(s.notes)}</div>` : ""}${pendingFiles.get(s)?.length ? `<div class="pick-thumbs">${pendingFiles.get(s).map(f => `<span><img src="${fileURL(f)}" alt=""></span>`).join("")}</div>` : ""}</div>
     ${w.phase === "stops" ? `<button type="button" class="btn ghost sm" data-rmstop="${i}" aria-label="Remove step ${i+1}">×</button>` : "<span></span>"}</li>`).join("")}</ol>` : "";
   if (w.phase === "stops") {
     pane.innerHTML = head + (w.stops.length ? "" : `<p class="hint">Add each place you went, one at a time, in the order you visited. Start with where the trip began. Your progress is kept on this device until you save.</p>`) + list + `
@@ -1661,6 +1838,7 @@ function renderWiz(pane){
         <label class="f">Country<input type="text" data-w="country" id="wz-country" list="countryList" value="${esc(n.country)}" placeholder="Country" autocomplete="off"></label></div>
       <label class="f">${N === 1 ? "How did you get there?" : "How did you get here?"}<select data-w="transport" id="wz-mode">${modeOptions(n.transport)}</select></label>
       <label class="f">What you did (optional)<textarea data-w="notes" id="wz-notes" rows="2" placeholder="Sights, food, where you stayed">${esc(n.notes)}</textarea></label>
+      ${pickerHTML(n, "wiz", pendingCount([...w.stops, n]))}
       <div class="row" style="align-items:center"><button type="button" class="btn sm" data-act="wizpick" aria-pressed="${mode==="wizpick"}">${mode === "wizpick" ? "Tap the map… (cancel)" : "Pick spot on map"}</button>
         ${num(n.lat) ? `<span class="hint mono">${fmtLL(n.lat, n.lng)}</span><button type="button" class="btn ghost sm" data-act="wizclearspot">Clear</button>` : `<span class="hint">or we'll find it from the name</span>`}</div>
       <div class="err" id="wizErr" role="alert"${w.err ? "" : " hidden"}>${esc(w.err)}</div>
@@ -1990,6 +2168,7 @@ async function boot(){
     $("#countryList").innerHTML = countryNames.map(n => `<option value="${esc(n)}">`).join("");
     drawCountries(); layout();
     (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => loadCities());   // so suggestions are instant
+    loadFlags();
   } catch(e) {
     const m = $("#maperr"); m.hidden = false; m.textContent = "The world map didn't load. Reload the page to try again.";
   }

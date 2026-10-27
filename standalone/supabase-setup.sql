@@ -112,3 +112,29 @@ create policy "Add own avatar" on storage.objects for insert to authenticated
   with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "Delete own avatar" on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- 6. Free-plan usage readout. Anyone can ask for these totals (they hold no one's data),
+--    and the app shows its usage warning only to the owner email set below.
+create table if not exists public.app_settings (key text primary key, value text not null);
+alter table public.app_settings enable row level security;   -- no policies: only the function below reads it
+insert into public.app_settings (key, value) values ('owner_email', '') on conflict (key) do nothing;
+-- To see the in-app warning, run this once with your own email (see SETUP.md):
+--   update public.app_settings set value = 'you@example.com' where key = 'owner_email';
+
+create or replace function public.usage_summary()
+returns json
+language sql
+security definer
+set search_path = public, storage
+as $$
+  select json_build_object(
+    'db_bytes',    pg_database_size(current_database()),
+    'db_limit',    500000000,        -- free plan: 500 MB database
+    'photo_bytes', coalesce((select sum((metadata ->> 'size')::bigint) from storage.objects where bucket_id in ('photos', 'avatars')), 0),
+    'photo_limit', 1000000000,       -- free plan: 1 GB file storage
+    'is_owner',    coalesce(lower(auth.jwt() ->> 'email') = (select lower(value) from public.app_settings where key = 'owner_email'), false),
+    'checked_at',  now()
+  );
+$$;
+revoke all on function public.usage_summary() from public;
+grant execute on function public.usage_summary() to anon, authenticated;

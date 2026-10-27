@@ -21,6 +21,12 @@ You need two free services:
 
 This sets up profiles, follow requests, trips, and two photo stores: private trip and country photos, and public profile pictures. It's safe to run again. If you update the app later and `supabase-setup.sql` has changed, paste and run the new version the same way.
 
+**Tell Supabase you're the owner.** This lets the app show you, and only you, a warning when the free plan is nearly full. Run this once in a new query, with your own email (the one you'll sign in to the app with):
+
+```sql
+update public.app_settings set value = 'you@example.com' where key = 'owner_email';
+```
+
 ## 3. Connect the app to your project
 
 1. In Supabase, open **Project Settings → API** (on some versions it's under **Data API** or **API Keys**).
@@ -58,6 +64,11 @@ To update the app later, drag the folder onto your site's **Deploys** page again
 
 - **Supabase free plan:** 1 GB of photos, roughly 1,000 to 2,000 photos at the size the app saves them; 500 MB for trip data, which is plenty; up to 50,000 users.
 - **One thing to know:** Supabase pauses a free project after a week with nobody using it. Nothing is lost. Log in to Supabase and click **Restore project** to bring it back.
+- **Keeping an eye on it:**
+  - When you're signed in as the owner, the app shows a warning bar once photo storage or the database reaches 95%. Your account panel always shows the current usage.
+  - From the project folder, `uv run interactive-map-usage` prints the same numbers. A daily scheduled task in the Claude app runs it and notifies you at 95%.
+  - Neither can see data transfer (photo viewing), so check that on Supabase's **Usage** page.
+- **Photos per trip:** each trip can have up to 10 photos, which keeps the free storage going further.
 - **The street map** comes from OpenStreetMap. It's free for light use like a group of friends, and the app shows the credit it asks for.
 
 ## How friends and privacy work
@@ -79,7 +90,8 @@ To update the app later, drag the folder onto your site's **Deploys** page again
 | Accounts | Yes, email and password | Your Claude account |
 | Following friends and a feed | Yes | No |
 | Trip photos | Yes | No |
-| Country photo fills | Yes | Yes, saved small, inside your map data |
+| Country photo fills and a default country photo | Yes | Yes, saved small, inside your map data |
+| Flags, US states, Canadian provinces | Yes | Yes |
 | Transport for each step | Yes | Yes |
 | Street map | Yes | No (Claude blocks outside map images) |
 | AI trip chat | No (only works inside Claude) | Yes |

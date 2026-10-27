@@ -11,6 +11,7 @@ dependencies = []
 
 [project.scripts]
 interactive-map = "interactive_map:main"
+interactive-map-usage = "interactive_map.usage:main"
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
