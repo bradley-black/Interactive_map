@@ -365,11 +365,20 @@ details.regions .hint{margin:8px 0}
 .sat #map .step-label,.sat #map .found-label{fill:#fff;stroke:rgba(0,0,0,.8)}
 .street #map .step-label,.street #map .found-label{fill:#13202A;stroke:#fff}
 .mapwrap.framing #map{cursor:move}
+.mapwrap.framing .maptools,.mapwrap.framing .legend,.mapwrap.framing .zoomer,.mapwrap.framing #map .placenames,.mapwrap.framing #map .label{display:none}
 .mapwrap.framing #map .cp-outline{stroke:var(--accent);stroke-width:2.5}
 .frame-ed{display:grid;gap:8px}
 .frame-ed label{display:grid;grid-template-columns:64px minmax(0,1fr) 48px;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);font-weight:600}
 .frame-ed input[type=range]{width:100%;accent-color:var(--accent)}
 .frame-ed output{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink)}
+.fitseg{display:flex;background:var(--soft);border-radius:9px;padding:3px;gap:3px}
+.fitseg button{flex:1;border:0;background:transparent;border-radius:7px;padding:6px 8px;font-weight:600;font-size:12.5px;color:var(--muted)}
+.fitseg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
+@media (max-width: 860px){
+  .mapwrap.framing{height:78vh;min-height:420px}
+  .found{bottom:8px;width:calc(100% - 16px);padding:10px 12px;gap:6px}
+  .found .frame-ed{gap:6px}
+}
 .toast{z-index:70;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:50;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
 
 @media (max-width: 860px){
@@ -896,14 +905,15 @@ function effPhoto(c){ if (c.photo?.none) return null; return usable(c.photo) ? c
 function drawCountryPhotos(){
   const list = all("country").filter(c => featByName.has(c.name)).map(c => ({...c, photo: effPhoto(c)})).filter(c => c.photo);
   const sel = gCPhotos.selectAll("g.cphoto").data(list, d => d.id + "|" + (d.photo.path || d.photo.data.length))
-    .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("g").attr("class", "cp-clip").append("image").attr("preserveAspectRatio", "xMidYMid slice"); g.append("path").attr("class", "cp-outline"); return g; });
+    .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("g").attr("class", "cp-clip").append("image"); g.append("path").attr("class", "cp-outline"); return g; });
   sel.each(function(d){
     const f = featByName.get(d.name), shape = path(f), [[x0, y0], [x1, y1]] = mainBounds(f), g = d3.select(this), cid = "cclip-" + d.id;
     g.select("clipPath").attr("id", cid).select("path").attr("d", shape);
     const fr = framing?.id === d.id ? framing.frame : (d.frame || {});
     const bw = Math.max(0, x1 - x0), bh = Math.max(0, y1 - y0), sc = fr.s || 1, cx = x0 + bw / 2 + (fr.x || 0) * bw, cy = y0 + bh / 2 + (fr.y || 0) * bh;
     g.select(".cp-clip").attr("clip-path", `url(#${cid})`);
-    const im = g.select("image").attr("x", cx - bw * sc / 2).attr("y", cy - bh * sc / 2).attr("width", bw * sc).attr("height", bh * sc)
+    const im = g.select("image").attr("preserveAspectRatio", fr.fit === "fill" ? "xMidYMid slice" : "xMidYMid meet")
+      .attr("x", cx - bw * sc / 2).attr("y", cy - bh * sc / 2).attr("width", bw * sc).attr("height", bh * sc)
       .attr("transform", fr.r ? `rotate(${fr.r} ${cx} ${cy})` : null);
     if (d.photo.data) im.attr("href", d.photo.data); else im.attr("data-path", d.photo.path);
     g.select(".cp-outline").attr("d", shape);
@@ -912,18 +922,20 @@ function drawCountryPhotos(){
 }
 // adjusting how a photo sits inside a country: drag to move, slider or wheel to resize, slider to rotate
 let framing = null;   // {id, name, frame:{s, x, y, r}, drag}
-const FRAME0 = {s:1, x:0, y:0, r:0};
+const FRAME0 = {s:1, x:0, y:0, r:0, fit:"whole"};   // whole: the entire photo shows; fill: it covers the country and the edges are trimmed
 function startFraming(name){
   const id = "c_" + slug(name), c = docs.get(id); if (!c || !effPhoto(c)) return;
   framing = {id, name, frame:{...FRAME0, ...(c.frame || {})}};
   $("#mapwrap").classList.add("framing"); setMode("country");
   renderFound(); drawCountryPhotos();
-  zoomToFeature(featByName.get(name), $("#found").offsetHeight + 64);
+  if (innerWidth <= 860) $("#mapwrap").scrollIntoView({block:"start", behavior:"smooth"});
+  setTimeout(() => framing && zoomToFeature(featByName.get(name), $("#found").offsetHeight + 24), 80);   // after the map has grown
 }
 function endFraming(save){
   if (!framing) return;
   const {id, frame} = framing; framing = null;
   $("#mapwrap").classList.remove("framing");
+  touches.clear();
   if (save) { const same = Object.keys(FRAME0).every(k => frame[k] === FRAME0[k]); const { frame: _f, ...rest } = docs.get(id); store.put(id, same ? rest : {...rest, frame}); toast("Photo position saved"); }
   else drawCountryPhotos();
   renderFound();
@@ -933,24 +945,46 @@ function setFrame(patch){
   framing.frame.s = Math.min(4, Math.max(0.3, framing.frame.s));
   framing.frame.x = Math.min(1.5, Math.max(-1.5, framing.frame.x));
   framing.frame.y = Math.min(1.5, Math.max(-1.5, framing.frame.y));
+  framing.frame.r = Math.round(((framing.frame.r + 540) % 360) - 180);
   drawCountryPhotos();
   const ed = $("#found .frame-ed"); if (!ed) return;
   ed.querySelector("#frS").value = Math.round(framing.frame.s * 100); ed.querySelector("#frSo").textContent = Math.round(framing.frame.s * 100) + "%";
   ed.querySelector("#frR").value = framing.frame.r; ed.querySelector("#frRo").textContent = framing.frame.r + "°";
+  ed.querySelectorAll("[data-fit]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fit === framing.frame.fit));
+}
+const touches = new Map();   // pointerId -> [x, y] in map units
+function beginGesture(){   // (re)start from the current fingers, so adding or lifting one never makes the photo jump
+  const f = featByName.get(framing.name); if (!f) return;
+  const [[x0, y0], [x1, y1]] = mainBounds(f);
+  framing.drag = {pts: [...touches.values()].map(p => [...p]), frame: {...framing.frame}, bw: x1 - x0 || 1, bh: y1 - y0 || 1};
 }
 svg.on("pointerdown.frame", e => {
   if (!framing) return;
-  const f = featByName.get(framing.name); if (!f) return;
-  const [[x0, y0], [x1, y1]] = mainBounds(f);
-  framing.drag = {p: d3.pointer(e, root.node()), x: framing.frame.x, y: framing.frame.y, bw: x1 - x0 || 1, bh: y1 - y0 || 1};
-  svg.node().setPointerCapture?.(e.pointerId);
+  e.preventDefault();
+  touches.set(e.pointerId, d3.pointer(e, root.node()));
+  try { svg.node().setPointerCapture(e.pointerId); } catch {}
+  beginGesture();
 });
 svg.on("pointermove.frame", e => {
-  const dr = framing?.drag; if (!dr) return;
-  const [px, py] = d3.pointer(e, root.node());
-  setFrame({x: dr.x + (px - dr.p[0]) / dr.bw, y: dr.y + (py - dr.p[1]) / dr.bh});
+  const g = framing?.drag; if (!g || !touches.has(e.pointerId)) return;
+  e.preventDefault();
+  touches.set(e.pointerId, d3.pointer(e, root.node()));
+  const now = [...touches.values()];
+  if (now.length === 1 && g.pts.length === 1) {
+    setFrame({x: g.frame.x + (now[0][0] - g.pts[0][0]) / g.bw, y: g.frame.y + (now[0][1] - g.pts[0][1]) / g.bh});
+  } else if (now.length >= 2 && g.pts.length >= 2) {
+    const [a0, b0] = g.pts, [a1, b1] = now;
+    const d0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) || 1, d1 = Math.hypot(b1[0] - a1[0], b1[1] - a1[1]);
+    const turn = (Math.atan2(b1[1] - a1[1], b1[0] - a1[0]) - Math.atan2(b0[1] - a0[1], b0[0] - a0[0])) * 180 / Math.PI;
+    const mid0 = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2], mid1 = [(a1[0] + b1[0]) / 2, (a1[1] + b1[1]) / 2];
+    setFrame({s: g.frame.s * d1 / d0, r: g.frame.r + turn, x: g.frame.x + (mid1[0] - mid0[0]) / g.bw, y: g.frame.y + (mid1[1] - mid0[1]) / g.bh});
+  }
 });
-svg.on("pointerup.frame pointercancel.frame", () => { if (framing) framing.drag = null; });
+svg.on("pointerup.frame pointercancel.frame", e => {
+  touches.delete(e.pointerId);
+  if (!framing) return;
+  if (touches.size) beginGesture(); else framing.drag = null;
+});
 svg.on("wheel.frame", e => { if (!framing) return; e.preventDefault(); setFrame({s: framing.frame.s * Math.exp(-e.deltaY * 0.0015)}); });
 document.addEventListener("keydown", e => { if (framing && e.key === "Escape") endFraming(false); });
 async function hydrateCountryPhotos(){
@@ -994,7 +1028,8 @@ async function setCountryPhoto(name, file){
     const { frame: _f, ...cur } = docs.get(id);
     await store.put(id, {...cur, photo});
     if (old?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([old.path]);
-    toast(`${name} is filled with your photo`);
+    toast(`${name} is filled with your photo. Drag, pinch or use the sliders to place it.`);
+    startFraming(name);
   } catch { toast("Couldn't add that photo. Try a JPEG."); }
   renderFound();
 }
@@ -1239,7 +1274,8 @@ function renderFound(){
     const fr = framing.frame;
     body = `<div class="found-h"><strong>Adjust photo · ${esc(f.name)}</strong></div>
       <div class="frame-ed">
-        <p class="hint" style="margin:0">Drag the photo on the map to move it. Scroll or use the slider to resize.</p>
+        <p class="hint" style="margin:0">Drag to move. Pinch or scroll to resize, twist with two fingers to rotate.</p>
+        <div class="fitseg" role="group" aria-label="How the photo fits"><button type="button" data-fit="whole" aria-pressed="${fr.fit !== "fill"}">Whole photo</button><button type="button" data-fit="fill" aria-pressed="${fr.fit === "fill"}">Fill country</button></div>
         <label>Size<input type="range" id="frS" min="30" max="400" step="1" value="${Math.round(fr.s * 100)}"><output id="frSo">${Math.round(fr.s * 100)}%</output></label>
         <label>Rotate<input type="range" id="frR" min="-180" max="180" step="1" value="${fr.r}"><output id="frRo">${fr.r}°</output></label>
         <div class="row"><button class="btn primary sm" data-f="frsave">Save</button><button class="btn sm" data-f="frcancel">Cancel</button><button class="btn ghost sm" data-f="frreset">Reset</button></div>
@@ -1254,7 +1290,7 @@ function renderFound(){
         ${own ? `<button class="btn sm" data-f="rmcphoto">${def ? "Go back to default photo" : "Remove photo"}</button>` : ""}
         ${!own && def && !none ? `<button class="btn sm" data-f="nophoto">Show colour instead</button>` : ""}
         ${none && def ? `<button class="btn sm" data-f="usedefault">Use default photo</button>` : ""}
-        ${effPhoto(cdoc) ? `<button class="btn sm" data-f="frame">Adjust photo</button>` : ""}
+        ${effPhoto(cdoc) ? `<button class="btn sm" data-f="frame" style="border-color:var(--accent);color:var(--accent)">Adjust photo</button>` : ""}
         ${(cdoc.color || null) !== fillColor ? `<button class="btn sm" data-f="recolour">Use the selected colour</button>` : ""}
         <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`; })()
       : `<div class="row"><button class="btn primary sm" data-f="country">Mark as visited</button></div>`}`;
@@ -1287,6 +1323,7 @@ $("#found").addEventListener("click", e => {
   if (a === "stop" && wiz) { setWizSpot([f.lng, f.lat], f.name, f.country); showTab("trips"); }
   renderFound();
 });
+$("#found").addEventListener("click", e => { const b = e.target.closest("[data-fit]"); if (b && framing) setFrame({fit: b.dataset.fit}); });
 $("#found").addEventListener("input", e => {
   if (!framing) return;
   if (e.target.id === "frS") setFrame({s: +e.target.value / 100});
