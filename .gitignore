@@ -11,3 +11,6 @@ wheels/
 
 # macOS
 .DS_Store
+
+# The original photo the logo was cut from (only logo.jpg is published)
+matan.JPG
