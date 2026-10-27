@@ -347,6 +347,13 @@ details.regions .hint{margin:8px 0}
 .defphoto{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .defphoto img,.defphoto .flagph{width:84px;height:56px;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
 .defphoto .flagph{border:1px dashed var(--line)}
+#map .pn-dot{fill:var(--muted);pointer-events:none}
+#map .pn-label{font-family:var(--body);font-weight:500;fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-linejoin:round;pointer-events:none}
+.sat #map .pn-label{fill:rgba(255,255,255,.92);stroke:rgba(0,0,0,.65)}
+.sat #map .pn-dot{fill:#fff}
+#map .step-label,#map .found-label{font-family:var(--body);font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-linejoin:round;pointer-events:none}
+.sat #map .step-label,.sat #map .found-label{fill:#fff;stroke:rgba(0,0,0,.8)}
+.street #map .step-label,.street #map .found-label{fill:#13202A;stroke:#fff}
 .toast{z-index:70;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:50;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
 
 @media (max-width: 860px){
@@ -778,10 +785,12 @@ const gImg = root.append("image").attr("class","sat-img").attr("preserveAspectRa
 const gGrat = root.append("path").attr("class","grat");
 const gCountries = root.append("g");
 const gCPhotos = root.append("g").attr("class", "cphotos");
+const gPlaceNames = root.append("g").attr("class", "placenames");
 const gRoutes = root.append("g");
 const gStops = root.append("g");
 const gCities = root.append("g");
 const gLabels = root.append("g");
+const gStepLabels = root.append("g");
 const gFound = root.append("g");
 const projNE = d3.geoNaturalEarth1(), projEQ = d3.geoEquirectangular(), projMC = d3.geoMercator();
 let mapStyle = "map";
@@ -789,7 +798,7 @@ let projection = projNE;
 const path = d3.geoPath(projection);
 if (path.digits) path.digits(6);     // street view zooms in far enough that rounding would shift borders
 let k = 1, W = 800, H = 500;
-const zoom = d3.zoom().scaleExtent([1, 40]).on("zoom", e => { root.attr("transform", e.transform); k = e.transform.k; drawTiles(e.transform); sizeMarks(); hideTip(); hidePin(); });
+const zoom = d3.zoom().scaleExtent([1, 40]).on("zoom", e => { root.attr("transform", e.transform); k = e.transform.k; drawTiles(e.transform); sizeMarks(); schedulePlaceNames(); hideTip(); hidePin(); });
 svg.call(zoom).on("dblclick.zoom", null);
 
 function sizeMarks(){
@@ -798,6 +807,36 @@ function sizeMarks(){
   gFound.select(".found-ring").attr("r", 14 / k * Math.min(k, 2));
   gFound.select(".found-dot").attr("r", 4.5 / k * Math.min(k, 2));
   gLabels.selectAll("text").attr("font-size", 11.5 / k).attr("dy", -8 / k).style("stroke-width", 3 / k + "px").attr("display", k >= 2.5 ? null : "none");
+  gStepLabels.selectAll("text").attr("font-size", 12.5 / k).attr("dx", 8 / k).attr("dy", "0.35em").style("stroke-width", 3.5 / k + "px");
+  gFound.select(".found-label").attr("font-size", 13 / k).attr("x", 16 / k).attr("dy", "0.35em").style("stroke-width", 3.5 / k + "px");
+}
+// built-in city names: the biggest cities first, more as you zoom in, never overlapping
+let pnFrame = 0, stepNames = new Set();
+function schedulePlaceNames(){ if (!pnFrame) pnFrame = requestAnimationFrame(() => { pnFrame = 0; drawPlaceNames(); }); }
+function drawPlaceNames(){
+  if (!LABEL_ORDER || mapStyle === "street" || !features.length) { gPlaceNames.selectAll("g").remove(); return; }
+  const t = d3.zoomTransform(svg.node());
+  const minScore = k < 1.6 ? 4e6 : k < 3 ? 2e6 : k < 6 ? 1e6 : k < 12 ? 4e5 : k < 25 ? 1.5e5 : 6e4;
+  const perCountry = k < 1.6 ? 1 : k < 3 ? 2 : k < 6 ? 4 : Infinity, used = new Map();
+  const skip = new Set([...all("city").map(c => norm(c.name)), ...stepNames]);   // those get their own labels
+  const taken = [], out = [];
+  for (const {c, score} of LABEL_ORDER) {
+    if (score < minScore || out.length >= 70) break;
+    if (skip.has(c.key) || (used.get(c.country) || 0) >= perCountry) continue;
+    const p = projection([c.lng, c.lat]); if (!p) continue;
+    const sx = t.applyX(p[0]), sy = t.applyY(p[1]);
+    if (sx < -10 || sy < -10 || sx > W + 10 || sy > H + 10) continue;
+    const w = c.name.length * 6.4 + 10, free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
+    const right = [sx - 3, sy - 8, sx + w, sy + 8], left = [sx - w, sy - 8, sx + 3, sy + 8];   // name to the right of the dot, or the left if that's taken
+    const side = free(right) ? "right" : free(left) ? "left" : null;
+    if (!side) continue;
+    taken.push(side === "right" ? right : left); out.push({c, p, side}); used.set(c.country, (used.get(c.country) || 0) + 1);
+  }
+  const sel = gPlaceNames.selectAll("g").data(out, d => d.c.key + d.c.lat)
+    .join(enter => { const g = enter.append("g"); g.append("circle").attr("class", "pn-dot"); g.append("text").attr("class", "pn-label"); return g; });
+  sel.attr("transform", d => `translate(${d.p[0]},${d.p[1]})`);
+  sel.select("circle").attr("r", 2 / k);
+  sel.select("text").attr("x", d => (d.side === "left" ? -5 : 5) / k).attr("text-anchor", d => d.side === "left" ? "end" : "start").attr("dy", "0.35em").attr("font-size", 11 / k).style("stroke-width", 3 / k + "px").text(d => d.c.name);
 }
 function layout(){
   const r = $("#mapwrap").getBoundingClientRect(); W = Math.max(300, r.width); H = Math.max(240, r.height);
@@ -907,10 +946,14 @@ function drawOverlay(){
     .attr("d", d => path({type:"LineString", coordinates:d.coords}))
     .attr("stroke", d => d.draft ? null : d.color)
     .classed("faded", d => selectedTrip && d.trip !== selectedTrip && !d.draft);
-  // trip stops (draft + selected)
+  // steps of the trip being written or opened, numbered and named
   const stops = [];
-  if (live) routeCoords(live).forEach((c,i) => stops.push({id:"d"+i, c, color:"var(--accent)"}));
-  else if (openTrip && shown().get(openTrip)) { const ot = shown().get(openTrip); routeCoords(ot).forEach((c,i) => stops.push({id:"o"+i, c, color:tripColor(ot)})); }
+  const addSteps = (t, color, prefix) => (t.days || []).forEach((d, i) => { if (num(d.lat) && num(d.lng)) stops.push({id:prefix + i, c:[+d.lng, +d.lat], color, place:d.city || d.country || "", label:`${i + 1}  ${d.city || d.country || ""}`.trim()}); });
+  if (live) addSteps(live, "var(--accent)", "d");
+  else if (openTrip && shown().get(openTrip)) { const ot = shown().get(openTrip); addSteps(ot, tripColor(ot), "o"); }
+  stepNames = new Set(stops.map(d => norm(d.place)));
+  gStepLabels.selectAll("text").data(stops, d => d.id).join("text").attr("class", "step-label")
+    .attr("x", d => projection(d.c)[0]).attr("y", d => projection(d.c)[1]).text(d => d.label);
   // cities
   const cities = all("city").filter(c => num(c.lat) && num(c.lng));
   gStops.selectAll("circle").data(stops, d => d.id).join("circle").attr("class","stop")
@@ -920,9 +963,9 @@ function drawOverlay(){
     .on("mousemove", (e,d) => showTip(e, d.name + (d.country ? ", " + d.country : "") + (d.approx ? " (approximate)" : "")))
     .on("mouseleave", hideTip)
     .on("click", (e,d) => { e.stopPropagation(); if (mode === "wizpick" && wiz) setWizSpot([d.lng, d.lat], d.name, d.country); });
-  gLabels.selectAll("text").data(cities, d => d.id).join("text").attr("class","label").attr("text-anchor","middle")
+  gLabels.selectAll("text").data(cities.filter(c => !stepNames.has(norm(c.name))), d => d.id).join("text").attr("class","label").attr("text-anchor","middle")
     .attr("x", d => projection([d.lng, d.lat])[0]).attr("y", d => projection([d.lng, d.lat])[1]).text(d => d.name);
-  sizeMarks();
+  sizeMarks(); schedulePlaceNames();
 }
 const tip = $("#tip");
 function showTip(e, text){ const r = $("#mapwrap").getBoundingClientRect(); tip.textContent = text; tip.style.left = (e.clientX - r.left) + "px"; tip.style.top = (e.clientY - r.top) + "px"; tip.hidden = false; }
@@ -990,11 +1033,14 @@ $("#styleStreet").onclick = () => setStyle("street");
 
 /* search */
 const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
-let CITIES = null, citiesLoading = null, results = [], active = -1, found = null;
+let CITIES = null, LABEL_ORDER = null, citiesLoading = null, results = [], active = -1, found = null;
 function loadCities(){
-  if (!citiesLoading) citiesLoading = fetch("cities.json").then(r => r.json()).then(rows => {
-    CITIES = rows.map(r => ({name:r[0], key:norm(r[0]), alt:r[1] ? norm(r[1]) : "", country:matchCountry(r[2]) || r[2], lat:r[3], lng:r[4], pop:r[5]}));
+  if (!citiesLoading) citiesLoading = fetch("cities.json?v=2").then(r => r.json()).then(rows => {
+    CITIES = rows.map(r => ({name:r[0], key:norm(r[0]), alt:r[1] ? norm(r[1]) : "", country:matchCountry(r[2]) || r[2], lat:r[3], lng:r[4], pop:r[5], cap:r[6] === 1}));
+    // order for map names: capitals count triple, so well-known cities win over large districts
+    LABEL_ORDER = CITIES.map(c => ({c, score: c.pop * (c.cap ? 3 : 1)})).sort((a, b) => b.score - a.score);
     if ($("#q").value.trim()) runSearch();
+    schedulePlaceNames();
     return CITIES;
   }).catch(() => { citiesLoading = null; return null; });
   return citiesLoading;
@@ -1104,8 +1150,9 @@ function zoomToFeature(f){
 function zoomToPoint(ll, s){ const [x,y] = projection(ll); svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s || Math.max(k, cityK())).translate(-x, -y)); }
 function drawFound(){
   const pts = found && found.type === "city" ? [found] : [];
-  const sel = gFound.selectAll("g").data(pts).join(enter => { const g = enter.append("g"); g.append("circle").attr("class","found-ring"); g.append("circle").attr("class","found-dot"); return g; });
+  const sel = gFound.selectAll("g").data(pts).join(enter => { const g = enter.append("g"); g.append("circle").attr("class","found-ring"); g.append("circle").attr("class","found-dot"); g.append("text").attr("class","found-label"); return g; });
   sel.attr("transform", d => { const [x,y] = projection([d.lng, d.lat]); return `translate(${x},${y})`; });
+  sel.select(".found-label").text(d => d.preview ? `${d.name}${d.country ? ", " + d.country : ""}` : "");
   sizeMarks();
 }
 function showFound(f){ found = f; renderFound(); drawFound(); }
@@ -1353,7 +1400,17 @@ function countryInputFor(el){
   return ({addCity:"#addCityCountry", pinName:"#pinCountry", "wz-city":"#wz-country"}[el.id] && $({addCity:"#addCityCountry", pinName:"#pinCountry", "wz-city":"#wz-country"}[el.id]))
     || el.closest(".dayrow")?.querySelector('[data-k="country"]') || null;
 }
-function closeSuggest(){ $("#suggest").hidden = true; sug.el?.setAttribute("aria-expanded", "false"); sug = {el:null, items:[], active:-1}; }
+function closeSuggest(){ $("#suggest").hidden = true; sug.el?.setAttribute("aria-expanded", "false"); sug = {el:null, items:[], active:-1}; if (found?.preview) { found = null; drawFound(); } }
+// show the highlighted suggestion as a named pin, bringing it into view if needed
+function previewSuggest(){
+  const r = sug.items[sug.active];
+  if (!r || !num(r.lat)) { if (found?.preview) { found = null; drawFound(); } return; }
+  found = {type:"city", quiet:true, preview:true, name:r.name, country:r.country, lat:+r.lat, lng:+r.lng};
+  renderFound(); drawFound();
+  const [x, y] = projection([r.lng, r.lat]), t = d3.zoomTransform(svg.node()), sx = t.applyX(x), sy = t.applyY(y);
+  const minK = mapStyle === "street" ? cityK() / 16 : 4;
+  if (sx < 40 || sy < 40 || sx > W - 40 || sy > H - 40 || k < minK) zoomToPoint([r.lng, r.lat], Math.max(k, minK));
+}
 function placeSuggest(){
   const ul = $("#suggest"), el = sug.el; if (!el || ul.hidden) return;
   const r = el.getBoundingClientRect(), w = Math.min(Math.max(r.width, 260), innerWidth - 16);
@@ -1365,7 +1422,7 @@ function renderSuggest(){
   const ul = $("#suggest"), el = sug.el;
   ul.innerHTML = sug.items.map((r, i) => `<li role="option" id="sg${i}" data-sg="${i}" aria-selected="${i === sug.active}"><span class="ic p"></span><span class="grow"><span class="nm">${esc(r.name)}</span><div class="sub">${esc(r.country)}${r.saved ? " · on your map" : r.fuzzy ? " · did you mean this?" : r.pop ? " · " + fmtPop(r.pop) : ""}</div></span></li>`).join("");
   ul.hidden = false; el.setAttribute("aria-expanded", "true"); el.setAttribute("aria-activedescendant", sug.active >= 0 ? "sg" + sug.active : "");
-  placeSuggest();
+  placeSuggest(); previewSuggest();
 }
 function openSuggest(el){
   const raw = el.value.trim(), cin = countryInputFor(el), hint = cin ? (matchCountry(cin.value) || "") : "";
@@ -1406,6 +1463,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") { e.preventDefault(); closeSuggest(); }
   else if (e.key === "Tab" && sug.active >= 0) pickSuggest(sug.items[sug.active]);
 });
+$("#suggest").addEventListener("mouseover", e => { const li = e.target.closest("[data-sg]"); if (li && +li.dataset.sg !== sug.active) { sug.active = +li.dataset.sg; renderSuggest(); } });
 $("#suggest").addEventListener("mousedown", e => { const li = e.target.closest("[data-sg]"); if (li) { e.preventDefault(); pickSuggest(sug.items[+li.dataset.sg]); } });
 window.addEventListener("resize", closeSuggest);
 document.addEventListener("scroll", placeSuggest, true);
