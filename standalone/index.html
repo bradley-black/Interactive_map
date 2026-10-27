@@ -364,6 +364,12 @@ details.regions .hint{margin:8px 0}
 #map .step-label,#map .found-label{font-family:var(--body);font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-linejoin:round;pointer-events:none}
 .sat #map .step-label,.sat #map .found-label{fill:#fff;stroke:rgba(0,0,0,.8)}
 .street #map .step-label,.street #map .found-label{fill:#13202A;stroke:#fff}
+.mapwrap.framing #map{cursor:move}
+.mapwrap.framing #map .cp-outline{stroke:var(--accent);stroke-width:2.5}
+.frame-ed{display:grid;gap:8px}
+.frame-ed label{display:grid;grid-template-columns:64px minmax(0,1fr) 48px;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);font-weight:600}
+.frame-ed input[type=range]{width:100%;accent-color:var(--accent)}
+.frame-ed output{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink)}
 .toast{z-index:70;position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:50;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
 
 @media (max-width: 860px){
@@ -783,6 +789,16 @@ function matchCountry(raw){
   const starts = countryNames.filter(n => n.toLowerCase().startsWith(low));
   return starts.length === 1 ? starts[0] : null;
 }
+// the bounds of a country's largest piece of land, so France means mainland France rather than France plus French Guiana
+const mainCache = new WeakMap();
+function mainBounds(f){
+  if (f.geometry?.type !== "MultiPolygon") return path.bounds(f);
+  if (!mainCache.has(f)) {
+    const polys = f.geometry.coordinates.map(c => ({type:"Polygon", coordinates:c}));
+    mainCache.set(f, polys.reduce((a, b) => d3.geoArea(b) > d3.geoArea(a) ? b : a));
+  }
+  return path.bounds(mainCache.get(f));
+}
 function countryCentroid(name){ const f = featByName.get(name); return f ? d3.geoCentroid(f) : null; }
 function countryAt(lonlat){ const f = features.find(f => d3.geoContains(f, lonlat)); return f ? f.properties.name : null; }
 
@@ -808,7 +824,7 @@ let projection = projNE;
 const path = d3.geoPath(projection);
 if (path.digits) path.digits(6);     // street view zooms in far enough that rounding would shift borders
 let k = 1, W = 800, H = 500;
-const zoom = d3.zoom().scaleExtent([1, 40]).on("zoom", e => { root.attr("transform", e.transform); k = e.transform.k; drawTiles(e.transform); sizeMarks(); schedulePlaceNames(); hideTip(); hidePin(); });
+const zoom = d3.zoom().filter(e => !framing && (!e.ctrlKey || e.type === "wheel") && !e.button).scaleExtent([1, 40]).on("zoom", e => { root.attr("transform", e.transform); k = e.transform.k; drawTiles(e.transform); sizeMarks(); schedulePlaceNames(); hideTip(); hidePin(); });
 svg.call(zoom).on("dblclick.zoom", null);
 
 function sizeMarks(){
@@ -871,7 +887,7 @@ function drawCountries(){
       else if (mode === "country") t += " · tap to mark";
       showTip(e, t); })
     .on("mouseleave", hideTip)
-    .on("click", (e,d) => { if (mode === "country") toggleCountry(d.properties.name); });
+    .on("click", (e,d) => { if (mode === "country" && !framing) toggleCountry(d.properties.name); });
 }
 // a visited country shows its own photo, otherwise the default photo, clipped to its outline
 const defaultPhoto = () => shown().get("settings")?.defaultPhoto || null;
@@ -880,16 +896,63 @@ function effPhoto(c){ if (c.photo?.none) return null; return usable(c.photo) ? c
 function drawCountryPhotos(){
   const list = all("country").filter(c => featByName.has(c.name)).map(c => ({...c, photo: effPhoto(c)})).filter(c => c.photo);
   const sel = gCPhotos.selectAll("g.cphoto").data(list, d => d.id + "|" + (d.photo.path || d.photo.data.length))
-    .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("image").attr("preserveAspectRatio", "xMidYMid slice"); g.append("path").attr("class", "cp-outline"); return g; });
+    .join(enter => { const g = enter.append("g").attr("class", "cphoto"); g.append("clipPath").append("path"); g.append("g").attr("class", "cp-clip").append("image").attr("preserveAspectRatio", "xMidYMid slice"); g.append("path").attr("class", "cp-outline"); return g; });
   sel.each(function(d){
-    const f = featByName.get(d.name), shape = path(f), [[x0, y0], [x1, y1]] = path.bounds(f), g = d3.select(this), cid = "cclip-" + d.id;
+    const f = featByName.get(d.name), shape = path(f), [[x0, y0], [x1, y1]] = mainBounds(f), g = d3.select(this), cid = "cclip-" + d.id;
     g.select("clipPath").attr("id", cid).select("path").attr("d", shape);
-    const im = g.select("image").attr("clip-path", `url(#${cid})`).attr("x", x0).attr("y", y0).attr("width", Math.max(0, x1 - x0)).attr("height", Math.max(0, y1 - y0));
+    const fr = framing?.id === d.id ? framing.frame : (d.frame || {});
+    const bw = Math.max(0, x1 - x0), bh = Math.max(0, y1 - y0), sc = fr.s || 1, cx = x0 + bw / 2 + (fr.x || 0) * bw, cy = y0 + bh / 2 + (fr.y || 0) * bh;
+    g.select(".cp-clip").attr("clip-path", `url(#${cid})`);
+    const im = g.select("image").attr("x", cx - bw * sc / 2).attr("y", cy - bh * sc / 2).attr("width", bw * sc).attr("height", bh * sc)
+      .attr("transform", fr.r ? `rotate(${fr.r} ${cx} ${cy})` : null);
     if (d.photo.data) im.attr("href", d.photo.data); else im.attr("data-path", d.photo.path);
     g.select(".cp-outline").attr("d", shape);
   });
   hydrateCountryPhotos();
 }
+// adjusting how a photo sits inside a country: drag to move, slider or wheel to resize, slider to rotate
+let framing = null;   // {id, name, frame:{s, x, y, r}, drag}
+const FRAME0 = {s:1, x:0, y:0, r:0};
+function startFraming(name){
+  const id = "c_" + slug(name), c = docs.get(id); if (!c || !effPhoto(c)) return;
+  framing = {id, name, frame:{...FRAME0, ...(c.frame || {})}};
+  $("#mapwrap").classList.add("framing"); setMode("country");
+  renderFound(); drawCountryPhotos();
+  zoomToFeature(featByName.get(name), $("#found").offsetHeight + 64);
+}
+function endFraming(save){
+  if (!framing) return;
+  const {id, frame} = framing; framing = null;
+  $("#mapwrap").classList.remove("framing");
+  if (save) { const same = Object.keys(FRAME0).every(k => frame[k] === FRAME0[k]); const { frame: _f, ...rest } = docs.get(id); store.put(id, same ? rest : {...rest, frame}); toast("Photo position saved"); }
+  else drawCountryPhotos();
+  renderFound();
+}
+function setFrame(patch){
+  Object.assign(framing.frame, patch);
+  framing.frame.s = Math.min(4, Math.max(0.3, framing.frame.s));
+  framing.frame.x = Math.min(1.5, Math.max(-1.5, framing.frame.x));
+  framing.frame.y = Math.min(1.5, Math.max(-1.5, framing.frame.y));
+  drawCountryPhotos();
+  const ed = $("#found .frame-ed"); if (!ed) return;
+  ed.querySelector("#frS").value = Math.round(framing.frame.s * 100); ed.querySelector("#frSo").textContent = Math.round(framing.frame.s * 100) + "%";
+  ed.querySelector("#frR").value = framing.frame.r; ed.querySelector("#frRo").textContent = framing.frame.r + "°";
+}
+svg.on("pointerdown.frame", e => {
+  if (!framing) return;
+  const f = featByName.get(framing.name); if (!f) return;
+  const [[x0, y0], [x1, y1]] = mainBounds(f);
+  framing.drag = {p: d3.pointer(e, root.node()), x: framing.frame.x, y: framing.frame.y, bw: x1 - x0 || 1, bh: y1 - y0 || 1};
+  svg.node().setPointerCapture?.(e.pointerId);
+});
+svg.on("pointermove.frame", e => {
+  const dr = framing?.drag; if (!dr) return;
+  const [px, py] = d3.pointer(e, root.node());
+  setFrame({x: dr.x + (px - dr.p[0]) / dr.bw, y: dr.y + (py - dr.p[1]) / dr.bh});
+});
+svg.on("pointerup.frame pointercancel.frame", () => { if (framing) framing.drag = null; });
+svg.on("wheel.frame", e => { if (!framing) return; e.preventDefault(); setFrame({s: framing.frame.s * Math.exp(-e.deltaY * 0.0015)}); });
+document.addEventListener("keydown", e => { if (framing && e.key === "Escape") endFraming(false); });
 async function hydrateCountryPhotos(){
   const ims = gCPhotos.selectAll("image").nodes().filter(n => n.dataset.path && !n.getAttribute("href"));
   if (!ims.length) return;
@@ -928,7 +991,8 @@ async function setCountryPhoto(name, file){
   try {
     const photo = await storePhoto(id, file);
     const old = docs.get(id)?.photo;
-    await store.put(id, {...docs.get(id), photo});
+    const { frame: _f, ...cur } = docs.get(id);
+    await store.put(id, {...cur, photo});
     if (old?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([old.path]);
     toast(`${name} is filled with your photo`);
   } catch { toast("Couldn't add that photo. Try a JPEG."); }
@@ -982,6 +1046,7 @@ function showTip(e, text){ const r = $("#mapwrap").getBoundingClientRect(); tip.
 function hideTip(){ tip.hidden = true; }
 
 svg.on("click", e => {
+  if (framing) return;
   if ((mode !== "pin" && mode !== "wizpick") || e.defaultPrevented) return;
   const [x,y] = d3.pointer(e, root.node());
   const ll = projection.invert([x,y]);
@@ -1151,11 +1216,11 @@ async function choose(r){
   const city = {type:"city", name:parts[0].trim(), country:matchCountry(g.country) || g.country || "", lat:+g.lat, lng:+g.lng};
   showFound(city); zoomToPoint([city.lng, city.lat]);
 }
-function zoomToFeature(f){
+function zoomToFeature(f, padBottom = 0){   // padBottom: keep the country clear of a panel covering the bottom of the map
   if (!f) return;
-  const [[x0,y0],[x1,y1]] = path.bounds(f);
-  const s = Math.max(1, Math.min(mapStyle === "street" ? 2 ** 10 : 20, 0.8 / Math.max((x1-x0)/W, (y1-y0)/H)));
-  svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s).translate(-(x0+x1)/2, -(y0+y1)/2));
+  const [[x0,y0],[x1,y1]] = mainBounds(f), h = Math.max(120, H - padBottom);
+  const s = Math.max(1, Math.min(mapStyle === "street" ? 2 ** 10 : 20, 0.8 / Math.max((x1-x0)/W, (y1-y0)/h)));
+  svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, h/2).scale(s).translate(-(x0+x1)/2, -(y0+y1)/2));
 }
 function zoomToPoint(ll, s){ const [x,y] = projection(ll); svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(s || Math.max(k, cityK())).translate(-x, -y)); }
 function drawFound(){
@@ -1170,7 +1235,16 @@ function renderFound(){
   const box = $("#found"); if (!found || found.quiet) { box.hidden = true; return; }
   const f = found, v = visitedSet();
   let body;
-  if (f.type === "country") {
+  if (f.type === "country" && framing?.name === f.name) {
+    const fr = framing.frame;
+    body = `<div class="found-h"><strong>Adjust photo · ${esc(f.name)}</strong></div>
+      <div class="frame-ed">
+        <p class="hint" style="margin:0">Drag the photo on the map to move it. Scroll or use the slider to resize.</p>
+        <label>Size<input type="range" id="frS" min="30" max="400" step="1" value="${Math.round(fr.s * 100)}"><output id="frSo">${Math.round(fr.s * 100)}%</output></label>
+        <label>Rotate<input type="range" id="frR" min="-180" max="180" step="1" value="${fr.r}"><output id="frRo">${fr.r}°</output></label>
+        <div class="row"><button class="btn primary sm" data-f="frsave">Save</button><button class="btn sm" data-f="frcancel">Cancel</button><button class="btn ghost sm" data-f="frreset">Reset</button></div>
+      </div>`;
+  } else if (f.type === "country") {
     const cdoc = shown().get("c_" + slug(f.name)), on = !!cdoc;
     if (viewing) body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited by " + esc(firstName(viewing.profile)) : "Not visited"}</span></div>`;
     else body = `<div class="found-h"><strong>${esc(f.name)}</strong><span class="src">${on ? "Visited" : "Country"}</span></div>
@@ -1180,6 +1254,7 @@ function renderFound(){
         ${own ? `<button class="btn sm" data-f="rmcphoto">${def ? "Go back to default photo" : "Remove photo"}</button>` : ""}
         ${!own && def && !none ? `<button class="btn sm" data-f="nophoto">Show colour instead</button>` : ""}
         ${none && def ? `<button class="btn sm" data-f="usedefault">Use default photo</button>` : ""}
+        ${effPhoto(cdoc) ? `<button class="btn sm" data-f="frame">Adjust photo</button>` : ""}
         ${(cdoc.color || null) !== fillColor ? `<button class="btn sm" data-f="recolour">Use the selected colour</button>` : ""}
         <button class="btn ghost sm danger" data-f="uncountry">Remove from visited</button></div>`; })()
       : `<div class="row"><button class="btn primary sm" data-f="country">Mark as visited</button></div>`}`;
@@ -1196,7 +1271,11 @@ function renderFound(){
 }
 $("#found").addEventListener("click", e => {
   const b = e.target.closest("[data-f]"); if (!b || !found) return; const f = found, a = b.dataset.f;
-  if (a === "close") { found = null; renderFound(); drawFound(); return; }
+  if (a === "close") { if (framing) endFraming(false); found = null; renderFound(); drawFound(); return; }
+  if (a === "frame") { startFraming(f.name); return; }
+  if (a === "frsave") { endFraming(true); return; }
+  if (a === "frcancel") { endFraming(false); return; }
+  if (a === "frreset") { setFrame({...FRAME0}); return; }
   if (a === "country") { const n = f.type === "country" ? f.name : f.country; addCountry(n, true); if (fillColor) { const id = "c_" + slug(n); store.put(id, {...docs.get(id), color:fillColor}); } toast(`Marked ${n} as visited`); }
   if (a === "uncountry") { const ph = docs.get("c_" + slug(f.name))?.photo; if (ph?.path && store.mode === "cloud") sb.storage.from(BUCKET).remove([ph.path]); store.remove("c_" + slug(f.name)); toast(`Removed ${f.name}`); }
   if (a === "rmcphoto") { removeCountryPhoto(f.name); return; }
@@ -1207,6 +1286,11 @@ $("#found").addEventListener("click", e => {
   if (a === "uncity") { store.remove("p_" + slug(f.name + "-" + (f.country || ""))); toast(`Removed ${f.name}`); }
   if (a === "stop" && wiz) { setWizSpot([f.lng, f.lat], f.name, f.country); showTab("trips"); }
   renderFound();
+});
+$("#found").addEventListener("input", e => {
+  if (!framing) return;
+  if (e.target.id === "frS") setFrame({s: +e.target.value / 100});
+  if (e.target.id === "frR") setFrame({r: +e.target.value});
 });
 $("#found").addEventListener("change", e => { if (e.target.dataset.cphoto !== undefined && e.target.files?.[0] && found?.type === "country") setCountryPhoto(found.name, e.target.files[0]); });
 let qT;
