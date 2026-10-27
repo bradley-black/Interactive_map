@@ -1,7 +1,7 @@
 [project]
 name = "interactive-map"
 version = "0.1.0"
-description = "Been There Atlas: a travel map for marking countries, cities and trips"
+description = "Schlepped There Atlas: a travel map for marking countries, cities and trips"
 readme = "README.md"
 license = "MIT"
 authors = [

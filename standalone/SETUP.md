@@ -1,4 +1,4 @@
-# Setting up Been There Atlas with free accounts and photos
+# Setting up Schlepped There Atlas with free accounts and photos
 
 This takes about 15 minutes. You do it once; after that your friends just visit the website, make an account, and start adding trips.
 
@@ -89,9 +89,13 @@ To update the app later, drag the folder onto your site's **Deploys** page again
 |---|---|---|
 | Accounts | Yes, email and password | Your Claude account |
 | Following friends and a feed | Yes | No |
+| Likes and comments on trips | Yes | No |
+| Bucket list | Yes | Yes |
+| State and province deep dive (USA, Canada) | Yes | Yes |
+| "I'm here" (uses your phone's location) | Yes, over https such as GitHub Pages | No (Claude's pages can't use location) |
 | Trip photos | Yes | No |
 | Country photo fills and a default country photo | Yes | Yes, saved small, inside your map data |
 | Flags, US states, Canadian provinces | Yes | Yes |
 | Transport for each step | Yes | Yes |
 | Street map | Yes | No (Claude blocks outside map images) |
-| AI trip chat | No (only works inside Claude) | Yes |
+| AI trip chat (bookings, ticket screenshots, questions, editing saved trips) | No (only works inside Claude) | Yes |

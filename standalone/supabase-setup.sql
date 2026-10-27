@@ -1,4 +1,4 @@
--- Been There Atlas: database and photo storage setup.
+-- Schlepped There Atlas: database and photo storage setup.
 -- Paste all of this into Supabase > SQL Editor > New query, then press Run.
 -- Safe to run more than once, including over an earlier version of this file.
 
@@ -138,3 +138,45 @@ as $$
 $$;
 revoke all on function public.usage_summary() from public;
 grant execute on function public.usage_summary() to anon, authenticated;
+
+-- 7. Likes and comments on trips. You can react to a trip only if you can see it (the rules in step 3 decide),
+--    and everyone who can see the trip sees its likes and comments.
+create table if not exists public.likes (
+  owner      uuid not null,
+  trip_id    text not null,
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (owner, trip_id, user_id),
+  foreign key (owner, trip_id) references public.docs (user_id, id) on delete cascade
+);
+create table if not exists public.comments (
+  id         uuid primary key default gen_random_uuid(),
+  owner      uuid not null,
+  trip_id    text not null,
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  body       text not null check (char_length(body) between 1 and 1000),
+  created_at timestamptz not null default now(),
+  foreign key (owner, trip_id) references public.docs (user_id, id) on delete cascade
+);
+create index if not exists comments_trip_idx on public.comments (owner, trip_id, created_at);
+alter table public.likes enable row level security;
+alter table public.comments enable row level security;
+
+drop policy if exists "See likes on trips you can see"    on public.likes;
+drop policy if exists "Like trips you can see"            on public.likes;
+drop policy if exists "Take back your like"               on public.likes;
+drop policy if exists "See comments on trips you can see" on public.comments;
+drop policy if exists "Comment on trips you can see"      on public.comments;
+drop policy if exists "Delete your comment, or any on your trip" on public.comments;
+create policy "See likes on trips you can see" on public.likes for select to authenticated
+  using (exists (select 1 from public.docs d where d.user_id = likes.owner and d.id = likes.trip_id));
+create policy "Like trips you can see" on public.likes for insert to authenticated
+  with check (user_id = auth.uid() and exists (select 1 from public.docs d where d.user_id = likes.owner and d.id = likes.trip_id));
+create policy "Take back your like" on public.likes for delete to authenticated
+  using (user_id = auth.uid());
+create policy "See comments on trips you can see" on public.comments for select to authenticated
+  using (exists (select 1 from public.docs d where d.user_id = comments.owner and d.id = comments.trip_id));
+create policy "Comment on trips you can see" on public.comments for insert to authenticated
+  with check (user_id = auth.uid() and exists (select 1 from public.docs d where d.user_id = comments.owner and d.id = comments.trip_id));
+create policy "Delete your comment, or any on your trip" on public.comments for delete to authenticated
+  using (user_id = auth.uid() or owner = auth.uid());

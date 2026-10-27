@@ -1,4 +1,4 @@
-"""Serve the website version of Been There Atlas (the standalone/ folder) on this computer."""
+"""Serve the website version of Schlepped There Atlas (the standalone/ folder) on this computer."""
 
 import functools
 import http.server
@@ -16,7 +16,7 @@ def main() -> None:
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=SITE)
     with http.server.ThreadingHTTPServer(("127.0.0.1", port), handler) as server:
         url = f"http://localhost:{port}"
-        print(f"Been There Atlas is running at {url}  (press Ctrl+C to stop)")
+        print(f"Schlepped There Atlas is running at {url}  (press Ctrl+C to stop)")
         webbrowser.open(url)
         try:
             server.serve_forever()
