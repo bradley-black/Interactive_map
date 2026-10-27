@@ -3,6 +3,7 @@ name = "interactive-map"
 version = "0.1.0"
 description = "Been There Atlas: a travel map for marking countries, cities and trips"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Bradley Black", email = "236290056+bradley-black@users.noreply.github.com" }
 ]

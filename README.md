@@ -25,6 +25,10 @@ Check how much of the free Supabase plan is used:
 uv run interactive-map-usage
 ```
 
+## Licence
+
+The code is released under the [MIT licence](LICENSE). The bundled data and images keep their own licences, listed below.
+
 ## Credits
 
 - Country outlines: [Natural Earth](https://www.naturalearthdata.com/) via world-atlas (public domain).
