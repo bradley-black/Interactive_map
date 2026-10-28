@@ -499,7 +499,7 @@ details.regions .hint{margin:8px 0}
     <div class="usagewarn" id="usageWarn" role="alert" hidden></div>
     <div class="stats" aria-live="polite">
       <div class="stat"><b id="sCountries">0</b><span>Countries</span></div>
-      <div class="stat"><b id="sPct">0%</b><span>of 195</span></div>
+      <div class="stat"><b id="sPct">0%</b><span>of 197</span></div>
       <div class="stat"><b id="sCities">0</b><span>Cities</span></div>
       <div class="stat"><b id="sTrips">0</b><span>Trips</span></div>
       <div class="stat"><b id="sKm" class="mono">0</b><span>km of routes</span></div>
@@ -897,12 +897,17 @@ function tripCountries(t){ return [...new Set((t.days||[]).map(d => d.country).f
 function fmtDate(s){ if(!s) return ""; const d=new Date(s+"T12:00:00"); return isNaN(d) ? s : d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}); }
 function fmtRange(a,b){ if(!a && !b) return "Dates not set"; if(!b || a===b) return fmtDate(a||b); return fmtDate(a) + " – " + fmtDate(b); }
 
+/* ---------- the 197 countries that count: the 193 UN members, the 2 UN observer states (Vatican City, Palestine),
+   plus Kosovo and Taiwan. Other places on the map (Greenland, Hong Kong, Puerto Rico...) can be marked but are territories. */
+const SOVEREIGN = new Set(["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barb.", "Argentina", "Armenia", "Ashmore and Cartier Is.", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herz.", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Rep.", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia", "Côte d'Ivoire", "Dem. Rep. Congo", "Denmark", "Djibouti", "Dominica", "Dominican Rep.", "Ecuador", "Egypt", "El Salvador", "Eq. Guinea", "Eritrea", "Estonia", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Macedonia", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Is.", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "S. Sudan", "Saint Lucia", "Samoa", "San Marino", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Is.", "Somalia", "South Africa", "South Korea", "Spain", "Sri Lanka", "St. Kitts and Nevis", "St. Vin. and Gren.", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "São Tomé and Principe", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe", "eSwatini"]);
+const COUNTRY_TOTAL = SOVEREIGN.size;   // 197
+const countsAsCountry = name => SOVEREIGN.has(name);
 /* ---------- country name matching ---------- */
 const ALIASES = {
   "usa":"United States of America","us":"United States of America","united states":"United States of America","america":"United States of America",
   "uk":"United Kingdom","england":"United Kingdom","scotland":"United Kingdom","wales":"United Kingdom","northern ireland":"United Kingdom","great britain":"United Kingdom","britain":"United Kingdom",
   "czech republic":"Czechia","holland":"Netherlands","the netherlands":"Netherlands","south korea":"South Korea","korea":"South Korea","republic of korea":"South Korea",
-  "uae":"United Arab Emirates","dubai":"United Arab Emirates","russia":"Russia","vatican city":"Vatican","ivory coast":"Côte d'Ivoire","cote d'ivoire":"Côte d'Ivoire",
+  "uae":"United Arab Emirates","dubai":"United Arab Emirates","russia":"Russia","vatican city":"Vatican","holy see":"Vatican","the vatican":"Vatican","state of palestine":"Palestine","republic of china":"Taiwan","roc":"Taiwan","ivory coast":"Côte d'Ivoire","cote d'ivoire":"Côte d'Ivoire",
   "bosnia":"Bosnia and Herz.","bosnia and herzegovina":"Bosnia and Herz.","dominican republic":"Dominican Rep.","czechia":"Czechia","swaziland":"eSwatini","eswatini":"eSwatini",
   "burma":"Myanmar","macedonia":"Macedonia","north macedonia":"Macedonia","drc":"Dem. Rep. Congo","democratic republic of the congo":"Dem. Rep. Congo",
   "central african republic":"Central African Rep.","south sudan":"S. Sudan","equatorial guinea":"Eq. Guinea","solomon islands":"Solomon Is.","bali":"Indonesia","hong kong":"Hong Kong","tahiti":"Fr. Polynesia","french polynesia":"Fr. Polynesia"
@@ -1792,7 +1797,7 @@ async function saveTrip(t, source){
 /* flags: one file with every country, US state, DC and Canadian province, loaded once */
 let FLAGS = null, flagsLoading = null;
 function loadFlags(){
-  if (!flagsLoading) flagsLoading = fetch("flags.json").then(r => r.json()).then(d => { FLAGS = d; renderPlaces(); return d; }).catch(() => { flagsLoading = null; return null; });
+  if (!flagsLoading) flagsLoading = fetch("flags.json?v=2").then(r => r.json()).then(d => { FLAGS = d; renderPlaces(); return d; }).catch(() => { flagsLoading = null; return null; });
   return flagsLoading;
 }
 const REGION_COUNTRY = {US: "United States of America", CA: "Canada"};
@@ -1809,7 +1814,8 @@ function renderRegionGroup(group, gridSel, countSel, secSel){
 }
 function renderPlaces(){
   const countries = all("country").sort((a,b) => a.name.localeCompare(b.name));
-  $("#cCount").textContent = countries.length;
+  const terr = countries.filter(c => !countsAsCountry(c.name)).length;
+  $("#cCount").textContent = `${countries.length - terr} of ${COUNTRY_TOTAL}${terr ? ` + ${terr} territor${terr === 1 ? "y" : "ies"}` : ""}`;
   $("#countryFlags").innerHTML = countries.length ? countries.map(c => `<button class="flagcard" data-cflag="${esc(c.name)}" title="Show ${esc(c.name)} on the map">${flagImg(FLAGS?.countries[c.name], c.name)}<span>${esc(c.name)}</span></button>`).join("")
     : `<div class="empty-note" style="grid-column:1 / -1">${viewing ? "No countries shared yet." : "No countries yet. Tap one on the map or add it above, and its flag appears here."}</div>`;
   const dp = docs.get("settings")?.defaultPhoto;
@@ -1857,7 +1863,9 @@ $("#addWishForm").addEventListener("submit", e => {
 $("#addCountryForm").addEventListener("submit", e => {
   e.preventDefault(); const v = $("#addCountry").value; const n = matchCountry(v);
   if (!n) { toast(`Couldn't find "${v}". Pick a name from the list.`); return; }
-  addCountry(n); $("#addCountry").value = ""; toast(`Added ${n}`);
+  $("#addCountry").value = "";
+  if (docs.has("c_" + slug(n))) { toast(`${n} is already on your map`); return; }
+  addCountry(n, true); toast(`Added ${n}`);
 });
 /* place suggestions under any city box */
 let sug = {el:null, items:[], active:-1}, sgT;
@@ -2426,7 +2434,9 @@ function normalizeDraft(t){
 function travelSummary(){   // what the AI may read about your own map (never a friend's)
   const mine = kind => [...docs.entries()].filter(([, d]) => d?.kind === kind).map(([id, d]) => ({id, ...d}));
   return {
-    countries_visited: mine("country").map(c => c.name).sort(),
+    countries_visited: mine("country").filter(c => countsAsCountry(c.name)).map(c => c.name).sort(),
+    countries_counted_out_of: COUNTRY_TOTAL,
+    territories_visited: mine("country").filter(c => !countsAsCountry(c.name)).map(c => c.name).sort(),
     us_states_and_canadian_provinces: mine("region").map(r => r.name).sort(),
     bucket_list: mine("wish").map(w => w.name).sort(),
     cities: mine("city").map(c => `${c.name}, ${c.country}`).slice(0, 200),
@@ -2827,8 +2837,9 @@ $("#panelShow").onclick = () => { setPanel(true); $("#panelHide").focus(); };
 /* ---------- render all ---------- */
 function render(){
   const countries = all("country"), cities = all("city"), trips = all("trip");
-  $("#sCountries").textContent = countries.length;
-  $("#sPct").textContent = Math.round(countries.filter(c => featByName.has(c.name)).length / 195 * 100) + "%";
+  const counted = countries.filter(c => countsAsCountry(c.name)).length;
+  $("#sCountries").textContent = counted;
+  $("#sPct").textContent = Math.round(counted / COUNTRY_TOTAL * 100) + "%";
   $("#sCities").textContent = cities.length;
   $("#sTrips").textContent = trips.length;
   $("#sKm").textContent = Math.round(trips.reduce((s,t) => s + routeKm(routeCoords(t)), 0)).toLocaleString();
@@ -2853,6 +2864,7 @@ async function boot(){
   try {
     const topo = await (await fetch("countries.json")).json();
     features = topojson.feature(topo, topo.objects.countries).features.filter(f => f.properties?.name);
+    if (!features.some(f => f.properties.name === "Tuvalu")) features.push({type:"Feature", id:"798", properties:{name:"Tuvalu"}, geometry:d3.geoCircle().center([179.19, -8.52]).radius(0.45)()});
     features.forEach(f => featByName.set(f.properties.name, f));
     countryNames = [...featByName.keys()].sort((a,b) => a.localeCompare(b));
     $("#countryList").innerHTML = countryNames.map(n => `<option value="${esc(n)}">`).join("");
